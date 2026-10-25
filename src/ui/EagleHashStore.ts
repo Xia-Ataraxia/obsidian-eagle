@@ -1,5 +1,3 @@
-import { Plugin } from 'obsidian'
-
 import { HASH_STORE_KEY as STORE_KEY } from '../domain/settings'
 
 import { PluginLogger } from '../utils/plugin-logger'
@@ -60,10 +58,9 @@ export default class EagleHashStore {
     }
   }
 
-  async save(plugin: Plugin): Promise<void> {
+  async save(owner: { mergeData(patch: () => Record<string, unknown>): Promise<void> }): Promise<void> {
     try {
-      const existing = ((await plugin.loadData()) as Record<string, unknown>) ?? {}
-      await plugin.saveData({ ...existing, [STORE_KEY]: this.data })
+      await owner.mergeData(() => ({ [STORE_KEY]: this.data }))
     } catch (err) {
        
       this.log.warn('failed to save hash store', { err: err instanceof Error ? err.message : String(err) })
