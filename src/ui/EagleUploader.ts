@@ -7,6 +7,7 @@ import type { NodeDataAdapter, NodeErrnoException } from '../types/obsidian'
 import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { EaglePluginSettings } from '../domain/settings'
 import { type EagleFolderTreeNode, extractResponseMessage, extractSearchItemsData, extractTextMessage, extractThumbnailCandidate, flattenFolderTree, normalizeRequestError, parseCreateFolderResponse, parseFolderList, parseFolderListResponse, parseItemInfoResponse, parseLibraryInfoResponse, parseSearchItemsResponse, parseStringDataResponse } from '../utils/eagle-response-parsers'
+import { raceAbort } from '../utils/race-abort'
 import { PluginLogger } from '../utils/plugin-logger'
 import { safeDisplayName, safeImageExtension } from '../utils/eagle-path-contract'
 import { extractFileExtension } from '../utils/image-format'
@@ -211,32 +212,30 @@ export default class EagleUploader {
     const cached = this.fileUrlCache.get(itemId)
     if (cached) return cached
 
-    const inFlight = this.fileUrlInFlight.get(itemId)
-    if (inFlight !== undefined) return inFlight
-
-    const promise = this.fetchFileUrlForItemId(itemId, signal)
-      .then((url) => {
-        if (url.startsWith('file://')) {
-          this.fileUrlCache.set(itemId, url)
-        }
-        return url
-      })
-      .finally(() => {
-        this.fileUrlInFlight.delete(itemId)
-      })
-
-    this.fileUrlInFlight.set(itemId, promise)
-    return promise
+    // The shared fetch carries no signal: a caller that cancels must not fail the callers that joined it.
+    let shared = this.fileUrlInFlight.get(itemId)
+    if (shared === undefined) {
+      shared = this.fetchFileUrlForItemId(itemId)
+        .then((url) => {
+          if (url.startsWith('file://')) this.fileUrlCache.set(itemId, url)
+          return url
+        })
+        .finally(() => {
+          this.fileUrlInFlight.delete(itemId)
+        })
+      this.fileUrlInFlight.set(itemId, shared)
+    }
+    return raceAbort(shared, signal)
   }
 
   // Use item info to get exact name + extension.
   // The thumbnail endpoint always returns .png thumbnails regardless of the original
   // file format, so deriving the original path from the thumbnail path gives the wrong
   // extension for non-PNG originals (e.g. .jpg files would resolve as .png).
-  private async fetchFileUrlForItemId(itemId: string, signal?: AbortSignal): Promise<string> {
+  private async fetchFileUrlForItemId(itemId: string): Promise<string> {
     const { eagleHost, eaglePort } = this.settings
     const infoUrl = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.ITEM_INFO}?id=${itemId}`
-    const infoData = parseItemInfoResponse(await this.requestJson(infoUrl, 'GET', undefined, signal))
+    const infoData = parseItemInfoResponse(await this.requestJson(infoUrl, 'GET'))
 
     if (infoData?.status !== 'success') {
       this.log.warn('item/info returned non-success', { itemId, status: infoData?.status })
@@ -244,7 +243,7 @@ export default class EagleUploader {
       this.log.warn('item/info response missing name/ext', { itemId })
     } else {
       const { name, ext } = infoData.data
-      const libraryRoot = await this.getLibraryRootPath(signal)
+      const libraryRoot = await this.getLibraryRootPath()
       if (!libraryRoot) {
         this.log.warn('cannot resolve library root — falling back to eagle:// URL', { itemId })
       } else {
