@@ -85,7 +85,7 @@ export class CacheSyncService {
           .filter((t) => renamedIds.has(t.itemId))
           .map((t) => {
             const displayName = nameMap.get(t.itemId) ?? ''
-            return { start: t.start, end: t.end, text: wikilinkForCacheItem(cacheFolder, t.itemId, t.ext, displayName) }
+            return { start: t.start, end: t.end, text: wikilinkForCacheItem(cacheFolder, t.itemId, t.ext, displayName, t.alias) }
           })
         if (replacements.length > 0) {
           await this.plugin.app.vault.modify(file, applyTextReplacements(content, replacements))

@@ -78,6 +78,24 @@ describe(findEagleWikilinkTokens, () => {
     expect(tokens[0]?.itemId).toBe('REALID')
   })
 
+  it('keeps dots in displayName up to the extension', () => {
+    const md = '![[eagle-cache/Screenshot 2024-11-26 at 16.39.41_MLEPEM81H6XKY.png]]'
+    const tokens = findEagleWikilinkTokens(md, CACHE)
+    expect(tokens).toHaveLength(1)
+    expect(tokens[0]?.itemId).toBe('MLEPEM81H6XKY')
+    expect(tokens[0]?.displayName).toBe('Screenshot 2024-11-26 at 16.39.41')
+    expect(tokens[0]?.ext).toBe('png')
+  })
+
+  it('captures a |size alias separately from the extension', () => {
+    const md = '![[eagle-cache/photo_ITEMID123.png|300]]'
+    const tokens = findEagleWikilinkTokens(md, CACHE)
+    expect(tokens).toHaveLength(1)
+    expect(tokens[0]?.ext).toBe('png')
+    expect(tokens[0]?.alias).toBe('|300')
+    expect(tokens[0]?.end).toBe(md.length)
+  })
+
   it('returns empty array when no eagle wikilinks are present', () => {
     expect(findEagleWikilinkTokens('no images here', CACHE)).toHaveLength(0)
   })

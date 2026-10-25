@@ -19,7 +19,7 @@ export async function renameCache(plugin: EaglePlugin, oldFolder: string, newFol
       const replacements = tokens.map((t) => ({
         start: t.start,
         end: t.end,
-        text: wikilinkForCacheItem(safeCacheFolderPath(newFolder), t.itemId, t.ext, t.displayName),
+        text: wikilinkForCacheItem(safeCacheFolderPath(newFolder), t.itemId, t.ext, t.displayName, t.alias),
       }))
       await plugin.app.vault.modify(file, applyTextReplacements(content, replacements))
       updatedFiles++
