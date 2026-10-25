@@ -2,7 +2,7 @@
 
 Upload images to Eagle and manage them alongside your vault.
 
-![Pasting an image into a note uploads it to Eagle and shows it from the local cache.](https://raw.githubusercontent.com/Xia-Ataraxia/obsidian-eagle/main/docs/assets/demo.webp)
+![Eagle settings: the connection test reports disconnected on a wrong port, then connected once the port is corrected. Upload and search are not shown.](https://raw.githubusercontent.com/Xia-Ataraxia/obsidian-eagle/main/docs/assets/demo.webp)
 
 ## Features
 
