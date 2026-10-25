@@ -2,7 +2,7 @@ import { App, ButtonComponent, Modal, TextComponent } from 'obsidian'
 
 import EagleApiError from '../domain/EagleApiError'
 import { PluginLogger } from '../utils/plugin-logger'
-import type { EagleItemSearchResult, EagleSearchPickerUploader } from './eagle-uploader-types'
+import type { EagleItemSearchResult, EagleSearchPickerUploader } from '../types/eagle-uploader-types'
 import { fileUrlToDisplayUrl } from './file-url'
 
 const SEARCH_RESULT_LIMIT = 100
