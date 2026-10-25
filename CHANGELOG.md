@@ -116,12 +116,12 @@
 - Store Eagle item IDs in markdown alt text (`![eagle:<id>](file://...)`) for portability.
 - Commands to re-resolve embedded image paths for the current note or the entire vault.
 
-[2.0.9]: https://github.com/GoBeromsu/obsidian-eagle-plugin/releases/tag/v2.0.9
-[2.0.8]: https://github.com/GoBeromsu/obsidian-eagle-plugin/releases/tag/v2.0.8
-[2.0.7]: https://github.com/GoBeromsu/obsidian-eagle-plugin/releases/tag/v2.0.7
-[2.0.6]: https://github.com/GoBeromsu/obsidian-eagle-plugin/releases/tag/v2.0.6
-[2.0.5]: https://github.com/GoBeromsu/obsidian-eagle-plugin/releases/tag/v2.0.5
-[2.0.4]: https://github.com/GoBeromsu/obsidian-eagle-plugin/releases/tag/v2.0.4
-[2.0.3]: https://github.com/GoBeromsu/obsidian-eagle-plugin/releases/tag/2.0.3
-[2.0.2]: https://github.com/GoBeromsu/obsidian-eagle-plugin/releases/tag/2.0.2
-[2.0.1]: https://github.com/GoBeromsu/obsidian-eagle-plugin/releases/tag/2.0.1
+[2.0.9]: https://github.com/Xia-Ataraxia/obsidian-eagle/releases/tag/v2.0.9
+[2.0.8]: https://github.com/Xia-Ataraxia/obsidian-eagle/releases/tag/v2.0.8
+[2.0.7]: https://github.com/Xia-Ataraxia/obsidian-eagle/releases/tag/v2.0.7
+[2.0.6]: https://github.com/Xia-Ataraxia/obsidian-eagle/releases/tag/v2.0.6
+[2.0.5]: https://github.com/Xia-Ataraxia/obsidian-eagle/releases/tag/v2.0.5
+[2.0.4]: https://github.com/Xia-Ataraxia/obsidian-eagle/releases/tag/v2.0.4
+[2.0.3]: https://github.com/Xia-Ataraxia/obsidian-eagle/releases/tag/2.0.3
+[2.0.2]: https://github.com/Xia-Ataraxia/obsidian-eagle/releases/tag/2.0.2
+[2.0.1]: https://github.com/Xia-Ataraxia/obsidian-eagle/releases/tag/2.0.1

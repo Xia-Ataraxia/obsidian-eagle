@@ -1,7 +1,7 @@
 # Eagle Integration
 
 ![Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&query=%24%5B%27eagle-plugin%27%5D.downloads&suffix=%20downloads&logo=obsidian&label=Obsidian&color=483699)
-![Latest Release](https://img.shields.io/github/v/release/GoBeromsu/obsidian-eagle-plugin?logo=github)
+![Latest Release](https://img.shields.io/github/v/release/Xia-Ataraxia/obsidian-eagle?logo=github)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 Paste images into Obsidian notes and they're automatically uploaded to [Eagle](https://eagle.cool/) — your dedicated media manager. Keep your vault lean, your Eagle library rich, and your images searchable.
@@ -46,7 +46,7 @@ Your Obsidian vault is for text. Eagle is for images. This plugin bridges them s
 
 ```bash
 cd <your-vault>/.obsidian/plugins
-git clone https://github.com/GoBeromsu/obsidian-eagle-plugin eagle-plugin
+git clone https://github.com/Xia-Ataraxia/obsidian-eagle eagle-plugin
 cd eagle-plugin
 pnpm install && pnpm build
 ```
@@ -202,7 +202,7 @@ A: Not yet. You can migrate individual images using the **Upload to Eagle** comm
 
 Contributions welcome. Please open an issue or discussion before starting work on large changes.
 
-For questions or suggestions, use [GitHub Discussions](https://github.com/GoBeromsu/obsidian-eagle-plugin/discussions).
+For questions or suggestions, use [GitHub Discussions](https://github.com/Xia-Ataraxia/obsidian-eagle/discussions).
 
 ## License
 

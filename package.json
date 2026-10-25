@@ -80,5 +80,13 @@
       "tmp": "^0.2.4",
       "ws": "^8.17.1"
     }
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xia-Ataraxia/obsidian-eagle.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Xia-Ataraxia/obsidian-eagle/issues"
+  },
+  "homepage": "https://github.com/Xia-Ataraxia/obsidian-eagle#readme"
 }
