@@ -94,11 +94,21 @@ export class CacheSyncService {
     )
   }
 
-  async lazySyncEagleCache(): Promise<void> {
+  /** Startup pass: one vault read serves both the legacy-name check and the cache sync. */
+  async startupSync(): Promise<void> {
+    const contents = await this.readAllMarkdown()
     const cacheFolder = this.plugin.cacheManager.cacheFolder
-    // Phase 1: Collect unique itemId → ext across all vault files in parallel
-    const seen = new Map<string, { ext: string; displayName: string | undefined }>() // itemId → {ext, displayName}
-    const fileContents = await Promise.all(
+    const hasLegacyNames = contents.some((c) => findEagleWikilinkTokens(c, cacheFolder).some((t) => t.displayName === undefined))
+    if (!hasLegacyNames) return this.lazySyncEagleCache(contents)
+    // Migration rewrites links, so the sync must re-read afterwards.
+    await this.migrateCacheFilesToReadableNames().catch((err) => {
+      this.plugin.log.error('cache filename migration failed', err)
+    })
+    return this.lazySyncEagleCache()
+  }
+
+  private readAllMarkdown(): Promise<string[]> {
+    return Promise.all(
       this.plugin.app.vault.getMarkdownFiles().map(async (file) => {
         try {
           return await this.plugin.app.vault.read(file)
@@ -108,6 +118,13 @@ export class CacheSyncService {
         }
       }),
     )
+  }
+
+  async lazySyncEagleCache(contents?: string[]): Promise<void> {
+    const cacheFolder = this.plugin.cacheManager.cacheFolder
+    // Phase 1: Collect unique itemId → ext across all vault files in parallel
+    const seen = new Map<string, { ext: string; displayName: string | undefined }>() // itemId → {ext, displayName}
+    const fileContents = contents ?? await this.readAllMarkdown()
     for (const content of fileContents) {
       for (const token of findEagleWikilinkTokens(content, cacheFolder)) {
         if (!seen.has(token.itemId)) seen.set(token.itemId, { ext: token.ext, displayName: token.displayName })

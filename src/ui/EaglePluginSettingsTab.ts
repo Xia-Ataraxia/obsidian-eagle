@@ -16,6 +16,7 @@ import { resolveDestinationPreview, sanitizeFolderMappings } from '../domain/fol
 import { ObsidianEagleFolderMapping } from '../domain/settings'
 import { PluginLogger } from '../utils/plugin-logger'
 import { EagleFolderWithPath } from './EagleUploader'
+import EagleCacheManager from './EagleCacheManager'
 import RenameCacheModal from './RenameCacheModal'
 import VaultFolderSuggestModal from './VaultFolderSuggestModal'
 
@@ -366,7 +367,13 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     const oldFolder = this.originalCacheFolderName
     const newFolder = this.plugin.settings.cacheFolderName
     if (oldFolder && newFolder !== oldFolder) {
-      new RenameCacheModal(this.plugin.app, oldFolder, newFolder, () => void this.plugin.renameCache(oldFolder, newFolder)).open()
+      new RenameCacheModal(
+        this.plugin.app,
+        oldFolder,
+        newFolder,
+        () => void this.plugin.renameCache(oldFolder, newFolder),
+        () => { this.plugin.cacheManager = new EagleCacheManager(this.plugin.app, newFolder) },
+      ).open()
     }
     this.originalCacheFolderName = newFolder
   }

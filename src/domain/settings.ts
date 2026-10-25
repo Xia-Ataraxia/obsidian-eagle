@@ -17,6 +17,9 @@ export interface EaglePluginSettings {
   plugin_notices?: { muted: Record<string, boolean> }
 }
 
+/** data.json key owned by EagleHashStore; never part of settings. */
+export const HASH_STORE_KEY = 'eagle-hash-store'
+
 export const DEFAULT_SETTINGS: EaglePluginSettings = {
   eagleHost: 'localhost',
   eaglePort: 41595,
@@ -27,4 +30,9 @@ export const DEFAULT_SETTINGS: EaglePluginSettings = {
   deduplicateUploads: true,
   searchDebounceMs: 300,
   uploadItemNameTemplate: '{uuid}_{noteName}',
+}
+
+export function settingsFromSavedData(raw: unknown): EaglePluginSettings {
+  const { [HASH_STORE_KEY]: _hashStore, ...saved } = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return { ...DEFAULT_SETTINGS, ...(saved as Partial<EaglePluginSettings>) }
 }

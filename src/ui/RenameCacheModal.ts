@@ -6,9 +6,12 @@ export default class RenameCacheModal extends Modal {
     private readonly oldFolder: string,
     private readonly newFolder: string,
     private readonly onConfirm: () => void,
+    private readonly onSkip: () => void,
   ) {
     super(app)
   }
+
+  private confirmed = false
 
   override onOpen() {
     const { contentEl } = this
@@ -28,6 +31,7 @@ export default class RenameCacheModal extends Modal {
       .setButtonText('Move & update')
       .setCta()
       .onClick(() => {
+        this.confirmed = true
         this.close()
         this.onConfirm()
       })
@@ -39,5 +43,7 @@ export default class RenameCacheModal extends Modal {
 
   override onClose() {
     this.contentEl.empty()
+    // Skip, Esc and click-outside all leave old files in place but must still point new caches at the new folder.
+    if (!this.confirmed) this.onSkip()
   }
 }

@@ -9,13 +9,13 @@ import {
 
 import EagleApiError from './domain/EagleApiError'
 import { sanitizeFolderMappings } from './domain/folder-mapping'
-import { DEFAULT_SETTINGS, EaglePluginSettings } from './domain/settings'
+import { EaglePluginSettings, settingsFromSavedData } from './domain/settings'
 import { DebounceController } from './utils/debounce-controller'
 import { PluginLogger } from './utils/plugin-logger'
 import { NoticeCatalog, PluginNotices } from './ui/plugin-notices'
 import { createEagleCanvasPasteHandler } from './ui/Canvas'
 import EagleCacheManager from './ui/EagleCacheManager'
-import EagleHashStore, { STORE_KEY } from './ui/EagleHashStore'
+import EagleHashStore from './ui/EagleHashStore'
 import EaglePluginSettingsTab from './ui/EaglePluginSettingsTab'
 import EagleSearchPickerModal from './ui/EagleSearchPickerModal'
 import EagleUploader, { type EagleItemSearchResult } from './ui/EagleUploader'
@@ -30,7 +30,7 @@ import { safeCacheFolderPath } from './utils/eagle-path-contract'
 import { extractFileExtension } from './utils/image-format'
 
 const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
-  links_updated: { template: 'Updated {{linksCount}} links in {{filesCount}} files' },
+  links_updated: { template: 'Updated {{linksCount}} link(s) in {{filesCount}} file(s)' },
   migrate_none: { template: 'No images to migrate.' },
   migrate_done: { template: 'Migrated {{count}} image(s) to {{folder}}.{{failureSuffix}}', timeout: 8000 },
   import_failed_api: { template: 'Failed to import from Eagle: {{message}}' },
@@ -120,13 +120,9 @@ export default class EaglePlugin extends Plugin {
     )
   }
 
-  private async loadSettings() {
+  private loadSettings(raw: unknown) {
     // data.json also holds the hash store; keep it out of settings so saveSettings() can't overwrite newer entries with this stale copy.
-    const { [STORE_KEY]: _hashStore, ...saved } = ((await this.loadData()) as Record<string, unknown> | null) ?? {}
-    this.settings = {
-      ...DEFAULT_SETTINGS,
-      ...(saved as Partial<EaglePluginSettings>),
-    }
+    this.settings = settingsFromSavedData(raw)
 
     this.settings.folderMappings = sanitizeFolderMappings(this.settings.folderMappings ?? [])
     this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
@@ -149,24 +145,24 @@ export default class EaglePlugin extends Plugin {
   }
 
   private async initPlugin() {
-    await this.loadSettings()
+    const raw = (await this.loadData()) as Record<string, unknown> | null
+    this.loadSettings(raw)
     this.notices = new PluginNotices(this, EAGLE_NOTICE_CATALOG, 'Eagle')
     this.addSettingTab(new EaglePluginSettingsTab(this.app, this))
 
     this.setupEagleUploader()
     this._cacheManager = new EagleCacheManager(this.app, this.settings.cacheFolderName)
     this._hashStore = new EagleHashStore()
-    await this._hashStore.load(this)
-    await this.cacheSync.migrateCacheFilesToReadableNames().catch((err) => {
-      this.log.error('cache filename migration failed', err)
-    })
+    this._hashStore.load(raw)
     this.setupEagleHandlers()
     this.addUploadLocalCommand()
     this.addImportFromEagleLibraryCommand()
     this.addMigrateAllImagesCommand()
     this.registerEagleImageRenderer()
-    void this.cacheSync.lazySyncEagleCache().catch((err) => {
-      this.log.error('background cache sync failed unexpectedly', err)
+    this.app.workspace.onLayoutReady(() => {
+      void this.cacheSync.startupSync().catch((err) => {
+        this.log.error('background cache sync failed unexpectedly', err)
+      })
     })
   }
 
