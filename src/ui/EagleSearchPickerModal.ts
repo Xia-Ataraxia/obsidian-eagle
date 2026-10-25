@@ -1,4 +1,4 @@
-import { App, ButtonComponent, Modal, TextComponent } from 'obsidian'
+import { App, ButtonComponent, Modal, TextComponent, setIcon } from 'obsidian'
 
 import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { searchErrorStatus } from '../domain/search-error'
@@ -351,6 +351,12 @@ export default class EagleSearchPickerModal extends Modal {
     }
   }
 
+  private showImageMissing(thumbWrapper: HTMLElement, ext?: string): void {
+    thumbWrapper.empty()
+    setIcon(thumbWrapper.createSpan({ cls: 'eagle-picker-missing' }), 'image-off')
+    this.appendExtBadge(thumbWrapper, ext)
+  }
+
   private enqueueThumbnailFallback(item: EagleItemSearchResult, thumbWrapper: HTMLElement): void {
     thumbWrapper.empty()
     thumbWrapper.createSpan({
@@ -401,6 +407,7 @@ export default class EagleSearchPickerModal extends Modal {
                 attr: { src: fileUrlToDisplayUrl(thumbnailUrl), loading: 'lazy', alt: item.name || item.id },
               })
               fallbackImg.addEventListener('load', () => fallbackImg.addClass('is-loaded'))
+              fallbackImg.addEventListener('error', () => this.showImageMissing(thumbWrapper, ext))
               this.appendExtBadge(thumbWrapper, ext)
               this.thumbFallbackMap.delete(item.id)
               this.debugLog('thumbnail:fallback:ok', {
