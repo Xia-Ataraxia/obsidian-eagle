@@ -1,66 +1,83 @@
+import type { DataAdapter } from 'obsidian'
+
 import type EaglePlugin from '../main'
 
 import EagleCacheManager from '../ui/EagleCacheManager'
-import { safeCacheFolderPath, safePathSegment, wikilinkForCacheItem } from '../utils/eagle-path-contract'
-import { applyTextReplacements, findEagleWikilinkTokens } from '../utils/markdown-image'
+import { rewriteNote } from '../ui/obsidian-vault'
+import { cachePathFor, safeCacheFolderPath, wikilinkForCacheItem } from '../utils/eagle-path-contract'
+import { findEagleWikilinkTokens } from '../utils/markdown-image'
 import { countLabel } from '../utils/plural'
 
-export async function renameCache(plugin: EaglePlugin, oldFolder: string, newFolder: string): Promise<void> {
-  // Step 1: Update wikilinks in all markdown files
-  let updatedFiles = 0
-  let updatedLinks = 0
-  const files = plugin.app.vault.getMarkdownFiles()
+async function listFilesRecursive(adapter: DataAdapter, folder: string): Promise<string[]> {
+  const listed = await adapter.list(folder)
+  const nested = await Promise.all(listed.folders.map((sub) => listFilesRecursive(adapter, sub)))
+  return [...listed.files, ...nested.flat()]
+}
 
+/** Moves every file under `from` into `to`, keeping relative paths. Returns the old paths that really moved. */
+async function moveCacheFiles(plugin: EaglePlugin, from: string, to: string): Promise<Set<string>> {
+  const { adapter } = plugin.app.vault
+  const moved = new Set<string>()
+  if (!(await adapter.exists(from))) return moved
+
+  const files = (await listFilesRecursive(adapter, from)).filter((path) => !path.startsWith(`${to}/`))
+  if (files.length === 0) return moved
+
+  await plugin.cacheManager.ensureCacheFolder()
   await Promise.all(
-    files.map(async (file) => {
-      const content = await plugin.app.vault.read(file)
-      const tokens = findEagleWikilinkTokens(content, oldFolder)
-      if (tokens.length === 0) return
-
-      const replacements = tokens.map((t) => ({
-        start: t.start,
-        end: t.end,
-        text: wikilinkForCacheItem(safeCacheFolderPath(newFolder), t.itemId, t.ext, t.displayName, t.alias),
-      }))
-      await plugin.app.vault.modify(file, applyTextReplacements(content, replacements))
-      updatedFiles++
-      updatedLinks += replacements.length
+    files.map(async (srcPath) => {
+      const destPath = `${to}${srcPath.slice(from.length)}`
+      try {
+        const parent = destPath.slice(0, destPath.lastIndexOf('/'))
+        if (!(await adapter.exists(parent))) await adapter.mkdir(parent)
+        await adapter.rename(srcPath, destPath)
+        moved.add(srcPath)
+      } catch {
+        plugin.log.warn('failed to move cache file', { srcPath })
+      }
     }),
   )
 
-  // Step 2: Move cached files from oldFolder to newFolder (OS-level rename, no I/O)
-  const safeNewFolder = safeCacheFolderPath(newFolder)
-  plugin.cacheManager = new EagleCacheManager(plugin.app, safeNewFolder)
+  // Remove the old folder only once nothing is left anywhere inside it.
+  if ((await listFilesRecursive(adapter, from)).length === 0) {
+    await adapter.rmdir(from, true).catch(() => plugin.log.warn('failed to remove old cache folder', { oldFolder: from }))
+  }
+  return moved
+}
 
-  let movedFiles = 0
-  try {
-    const listed = await plugin.app.vault.adapter.list(oldFolder)
-    await plugin.cacheManager.ensureCacheFolder()
-    await Promise.allSettled(
-      listed.files.map(async (srcPath) => {
-        const fileName = srcPath.split('/').pop()
-        const destPath = `${safeNewFolder}/${safePathSegment(fileName ?? 'image')}`
-        try {
-          await plugin.app.vault.adapter.rename(srcPath, destPath)
-          movedFiles++
-        } catch {
-          plugin.log.warn('failed to move cache file', { srcPath })
-        }
-      }),
-    )
-    // Non-recursive rmdir fails with EISDIR even on empty folders, so verify emptiness and remove recursively.
-    const remaining = await plugin.app.vault.adapter.list(oldFolder)
-    if (remaining.files.length === 0 && remaining.folders.length === 0) {
-      await plugin.app.vault.adapter.rmdir(oldFolder, true).catch(() => plugin.log.warn('failed to remove old cache folder', { oldFolder }))
+export async function renameCache(plugin: EaglePlugin, oldFolder: string, newFolder: string): Promise<void> {
+  const from = safeCacheFolderPath(oldFolder)
+  const to = safeCacheFolderPath(newFolder)
+  plugin.cacheManager = new EagleCacheManager(plugin.app, to)
+  if (from === to) return
+
+  // Files move first; links are rewritten only for files that actually arrived.
+  const moved = await moveCacheFiles(plugin, from, to).catch((err: unknown) => {
+    plugin.log.warn('cache move failed', { err: err instanceof Error ? err.message : String(err) })
+    return new Set<string>()
+  })
+
+  let updatedFiles = 0
+  let updatedLinks = 0
+  if (moved.size > 0) {
+    const { vault } = plugin.app
+    for (const file of vault.getMarkdownFiles()) {
+      const count = await rewriteNote(vault, file, (content) =>
+        findEagleWikilinkTokens(content, from)
+          .filter((t) => moved.has(cachePathFor(from, t.itemId, t.ext, t.displayName)))
+          .map((t) => ({ start: t.start, end: t.end, text: wikilinkForCacheItem(to, t.itemId, t.ext, t.displayName, t.alias) })),
+      )
+      if (count > 0) {
+        updatedFiles++
+        updatedLinks += count
+      }
     }
-  } catch {
-    // oldFolder doesn't exist or is empty — that's fine
   }
 
   plugin.notices.show('cache_renamed', {
-    newFolder: safeNewFolder,
+    newFolder: to,
     links: countLabel(updatedLinks, 'link'),
     files: countLabel(updatedFiles, 'file'),
-    moved: countLabel(movedFiles, 'file'),
+    moved: countLabel(moved.size, 'file'),
   })
 }

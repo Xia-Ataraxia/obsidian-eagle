@@ -4,8 +4,9 @@ import type EaglePlugin from '../main'
 
 import EagleApiError from '../domain/EagleApiError'
 import { wikilinkForCacheItem } from '../utils/eagle-path-contract'
-import { applyTextReplacements, findEagleWikilinkTokens, type WikilinkEmbedToken } from '../utils/markdown-image'
+import { findEagleWikilinkTokens, type WikilinkEmbedToken } from '../utils/markdown-image'
 import { fileUrlToOsPath } from '../ui/file-url'
+import { rewriteNote } from '../ui/obsidian-vault'
 
 export class CacheSyncService {
   constructor(private readonly plugin: EaglePlugin) {}
@@ -21,13 +22,13 @@ export class CacheSyncService {
 
     // Collect all old-format tokens (stem has no underscore before the itemId).
     // New-format tokens already have displayName set, so we skip them.
-    const tokensByFile = new Map<string, { file: TFile; content: string; tokens: WikilinkEmbedToken[] }>()
+    const tokensByFile = new Map<string, { file: TFile; tokens: WikilinkEmbedToken[] }>()
 
     await Promise.all(
       this.plugin.app.vault.getMarkdownFiles().map(async (file) => {
         const content = await this.plugin.app.vault.read(file)
         const oldTokens = findEagleWikilinkTokens(content, cacheFolder).filter((t) => t.displayName === undefined)
-        if (oldTokens.length > 0) tokensByFile.set(file.path, { file, content, tokens: oldTokens })
+        if (oldTokens.length > 0) tokensByFile.set(file.path, { file, tokens: oldTokens })
       }),
     )
 
@@ -66,10 +67,9 @@ export class CacheSyncService {
         if (oldPath === newPath) return
 
         try {
-          if (await adapter.exists(oldPath)) {
-            await adapter.rename(oldPath, newPath)
-          }
-          renamedIds.add(itemId)
+          // Links are rewritten only when the target really exists under its new name.
+          if (await adapter.exists(oldPath)) await adapter.rename(oldPath, newPath)
+          if (await adapter.exists(newPath)) renamedIds.add(itemId)
         } catch {
           this.plugin.log.warn('cache migration rename failed', { itemId })
         }
@@ -78,19 +78,15 @@ export class CacheSyncService {
 
     if (renamedIds.size === 0) return
 
-    // Update wikilinks in all affected vault files.
+    // Update wikilinks atomically; tokens are re-read from the content being written.
     await Promise.allSettled(
-      Array.from(tokensByFile.values()).map(async ({ file, content, tokens }) => {
-        const replacements = tokens
-          .filter((t) => renamedIds.has(t.itemId))
-          .map((t) => {
-            const displayName = nameMap.get(t.itemId) ?? ''
-            return { start: t.start, end: t.end, text: wikilinkForCacheItem(cacheFolder, t.itemId, t.ext, displayName, t.alias) }
-          })
-        if (replacements.length > 0) {
-          await this.plugin.app.vault.modify(file, applyTextReplacements(content, replacements))
-        }
-      }),
+      Array.from(tokensByFile.values()).map(({ file }) =>
+        rewriteNote(this.plugin.app.vault, file, (content) =>
+          findEagleWikilinkTokens(content, cacheFolder)
+            .filter((t) => t.displayName === undefined && renamedIds.has(t.itemId))
+            .map((t) => ({ start: t.start, end: t.end, text: wikilinkForCacheItem(cacheFolder, t.itemId, t.ext, nameMap.get(t.itemId) ?? '', t.alias) })),
+        ),
+      ),
     )
   }
 

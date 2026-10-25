@@ -3,15 +3,18 @@ import type { TFile } from 'obsidian'
 import type EaglePlugin from '../main'
 
 import { fileUrlToOsPath } from '../ui/file-url'
+import { rewriteNote } from '../ui/obsidian-vault'
 import { wikilinkForCacheItem } from '../utils/eagle-path-contract'
 import { eagleItemIdFromAlt } from '../utils/eagle-item-id'
 import { extractFileExtension } from '../utils/image-format'
-import { applyTextReplacements, findMarkdownImageTokens } from '../utils/markdown-image'
+import { findMarkdownImageTokens } from '../utils/markdown-image'
 import { countLabel } from '../utils/plural'
 
-interface OldFormatMatch {
-  token: ReturnType<typeof findMarkdownImageTokens>[number]
-  itemId: string
+function findOldFormatTokens(content: string) {
+  return findMarkdownImageTokens(content).flatMap((token) => {
+    const itemId = eagleItemIdFromAlt(token.alt)
+    return itemId === null ? [] : [{ token, itemId }]
+  })
 }
 
 export class ImageMigrationService {
@@ -20,28 +23,21 @@ export class ImageMigrationService {
   async migrateAllImages(): Promise<void> {
     const cacheFolderName = this.plugin.settings.cacheFolderName
 
-    // Phase 1: Scan all files for old-format tokens in parallel
-    const oldFormatByFile = new Map<string, { file: TFile; content: string; candidates: OldFormatMatch[] }>()
+    // Phase 1: Find files with old-format tokens
+    const filesWithOldFormat: TFile[] = []
     const itemIds = new Set<string>()
 
-    const fileResults = await Promise.all(
+    await Promise.all(
       this.plugin.app.vault.getMarkdownFiles().map(async (file) => {
-        const content = await this.plugin.app.vault.read(file)
-        const oldCandidates = findMarkdownImageTokens(content)
-          .map((token) => ({ token, itemId: eagleItemIdFromAlt(token.alt) }))
-          .filter((c): c is OldFormatMatch => c.itemId !== null)
-        return { file, content, oldCandidates }
+        const content = await this.plugin.app.vault.cachedRead(file)
+        const ids = findOldFormatTokens(content).map((c) => c.itemId)
+        if (ids.length === 0) return
+        filesWithOldFormat.push(file)
+        for (const id of ids) itemIds.add(id)
       }),
     )
 
-    for (const { file, content, oldCandidates } of fileResults) {
-      if (oldCandidates.length > 0) {
-        oldFormatByFile.set(file.path, { file, content, candidates: oldCandidates })
-        for (const { itemId } of oldCandidates) itemIds.add(itemId)
-      }
-    }
-
-    if (oldFormatByFile.size === 0) {
+    if (filesWithOldFormat.length === 0) {
       this.plugin.notices.show('migrate_none')
       return
     }
@@ -82,22 +78,15 @@ export class ImageMigrationService {
       }),
     )
 
-    // Phase 4: Update vault files
+    // Phase 4: Update vault files atomically, re-reading tokens from the content being written
     let migratedCount = 0
-
-    for (const [, { file, content, candidates }] of oldFormatByFile) {
-      const replacements: { start: number; end: number; text: string }[] = []
-
-      for (const { token, itemId } of candidates) {
-        const ext = successExt.get(itemId)
-        if (!ext) continue
-        replacements.push({ start: token.start, end: token.end, text: wikilinkForCacheItem(cacheFolderName, itemId, ext) })
-        migratedCount++
-      }
-
-      if (replacements.length > 0) {
-        await this.plugin.app.vault.modify(file, applyTextReplacements(content, replacements))
-      }
+    for (const file of filesWithOldFormat) {
+      migratedCount += await rewriteNote(this.plugin.app.vault, file, (content) =>
+        findOldFormatTokens(content).flatMap(({ token, itemId }) => {
+          const ext = successExt.get(itemId)
+          return ext ? [{ start: token.start, end: token.end, text: wikilinkForCacheItem(cacheFolderName, itemId, ext) }] : []
+        }),
+      )
     }
 
     let failureSuffix = ''
