@@ -17,9 +17,9 @@ Upload images to Eagle and manage them alongside your vault.
 1. Start Eagle (3.0 or later) with its local API on, default `localhost:41595`.
 2. Paste or drag an image into a note. It uploads to Eagle and a wikilink such as `![[eagle-cache/<id>.jpg]]` is inserted.
 3. Run **Insert image from Eagle (search)** to find an existing image, or right-click a local image and choose **Upload to Eagle**.
-4. Run **Migrate all images to eagle-cache** once to convert old `![eagle:ID](...)` links from versions before 2.0.
+4. Run **Migrate all images to the cache folder** once to convert old `![eagle:ID](...)` links from versions before 2.0.
 
-Missing cache files are restored from Eagle on startup and tab switch. Deleting an image in Eagle removes its cache copy on the next sync. Animated GIFs pasted from the clipboard arrive as static images; drag and drop them instead.
+Missing cache files are restored from Eagle on startup and tab switch. Deleting an image in Eagle removes its cache copy on the next sync. If Eagle is closed when you paste, the image is saved to your vault as a regular attachment; right-click it later and choose **Upload to Eagle**. Animated GIFs pasted from the clipboard arrive as static images; drag and drop them instead.
 
 ## Installation
 
