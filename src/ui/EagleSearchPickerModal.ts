@@ -1,6 +1,7 @@
 import { App, ButtonComponent, Modal, TextComponent } from 'obsidian'
 
 import EagleApiError from '../domain/EagleApiError'
+import { countLabel } from '../utils/plural'
 import { PluginLogger } from '../utils/plugin-logger'
 import type { EagleItemSearchResult, EagleSearchPickerUploader } from '../types/eagle-uploader-types'
 import { fileUrlToDisplayUrl } from './file-url'
@@ -39,7 +40,7 @@ export default class EagleSearchPickerModal extends Modal {
     this.onChoose = onChoose
     this.debugSearchDiagnostics = debugSearchDiagnostics
     this.debounceMs = debounceMs
-    this.setTitle('Search eagle library')
+    this.setTitle('Search Eagle library')
   }
 
   override onOpen(): void {
@@ -165,7 +166,7 @@ export default class EagleSearchPickerModal extends Modal {
       if (results.length === 0) {
         this.setStatus(`No results for "${keyword}".`, 'info')
       } else {
-        this.setStatus(`Found ${results.length} result(s). Select one to insert.`, 'info')
+        this.setStatus(`Found ${countLabel(results.length, 'result')}. Select one to insert.`, 'info')
       }
       this.renderGrid(token)
     } catch (error) {
@@ -212,10 +213,13 @@ export default class EagleSearchPickerModal extends Modal {
 
     if (this.results.length === 0) {
       const emptyState = this.gridEl.createDiv({ cls: 'eagle-picker-empty-state' })
-      emptyState.createEl('p', {
-        text: 'No results.',
-        cls: 'eagle-picker-empty',
-      })
+      // The status line already explains a failed search.
+      if (this.statusKind !== 'error') {
+        emptyState.createEl('p', {
+          text: 'No results.',
+          cls: 'eagle-picker-empty',
+        })
+      }
       const actions = emptyState.createDiv({ cls: 'modal-button-container' })
       if (this.statusKind === 'error') {
         new ButtonComponent(actions)

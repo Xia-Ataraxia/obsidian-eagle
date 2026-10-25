@@ -14,9 +14,10 @@ import type EaglePlugin from '../main'
 
 import { resolveDestinationPreview, sanitizeFolderMappings } from '../domain/folder-mapping'
 import { ObsidianEagleFolderMapping } from '../domain/settings'
+import { countLabel } from '../utils/plural'
 import { PluginLogger } from '../utils/plugin-logger'
-import { EagleFolderWithPath } from './EagleUploader'
 import EagleCacheManager from './EagleCacheManager'
+import { EagleFolderWithPath } from './EagleUploader'
 import RenameCacheModal from './RenameCacheModal'
 import VaultFolderSuggestModal from './VaultFolderSuggestModal'
 
@@ -67,16 +68,16 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
         items: [
           { name: 'Eagle API host', desc: 'The host for your running Eagle instance.', control: { type: 'text', key: 'eagleHost', placeholder: 'Localhost' } },
           { name: 'Eagle API port', desc: 'The port for your running Eagle instance.', control: { type: 'number', key: 'eaglePort', placeholder: '41595', min: 1, max: 65535, defaultValue: 41595 } },
-          { name: 'Test connection', desc: 'Verify that eagle is reachable with the current host and port.', render: (setting) => this.renderConnectionTest(setting) },
+          { name: 'Test connection', desc: 'Verify that Eagle is reachable with the current host and port.', render: (setting) => this.renderConnectionTest(setting) },
         ],
       },
       {
         type: 'group',
         heading: 'Upload',
         items: [
-          { name: 'Eagle folder name', desc: 'The folder name in eagle where images will be saved. Leave empty to save to the default folder.', render: (setting) => this.renderEagleFolderName(setting) },
+          { name: 'Eagle folder name', desc: 'The folder name in Eagle where images will be saved. Leave empty to save to the default folder.', render: (setting) => this.renderEagleFolderName(setting) },
           { name: 'Item name template', desc: 'Name given to each uploaded item in Eagle. Available tokens: {originalName} (filename without extension), {noteName} (active note), {date} (YYYY-MM-DD), {uuid} (short random ID). Falls back to {originalName} if empty.', control: { type: 'text', key: 'uploadItemNameTemplate', placeholder: '{uuid}_{noteName}' } },
-          { name: 'Deduplicate uploads', desc: 'Skip uploading images that already exist in eagle (matched by file hash).', control: { type: 'toggle', key: 'deduplicateUploads' } },
+          { name: 'Deduplicate uploads', desc: 'Skip uploading images that already exist in Eagle (matched by file hash).', control: { type: 'toggle', key: 'deduplicateUploads' } },
         ],
       },
       {
@@ -90,7 +91,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
       {
         type: 'list',
         heading: 'Folder mapping (Obsidian → eagle)',
-        emptyState: 'No mappings yet. Add one to route specific Obsidian folders to eagle folders.',
+        emptyState: 'No mappings yet. Add one to route specific Obsidian folders to Eagle folders.',
         addItem: {
           name: 'Add mapping',
           action: () => {
@@ -264,7 +265,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
       if (folders.length === 0 || !setting.settingEl.isConnected) return
       eagleControl?.remove()
       setting.addDropdown((dropdown) => {
-        this.fillEagleFolderOptions(dropdown, folders, mapping.eagleFolder, '— pick eagle folder —')
+        this.fillEagleFolderOptions(dropdown, folders, mapping.eagleFolder, '— pick Eagle folder —')
         dropdown.onChange((value) => {
           mapping.eagleFolder = value
           this.updatePreviewDesc()
@@ -360,7 +361,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     )
     const removed = before - this.plugin.settings.folderMappings.length
     if (removed > 0) {
-      new Notice(`Eagle: removed ${removed} incomplete folder mapping(s)`)
+      new Notice(`Eagle: removed ${countLabel(removed, 'incomplete folder mapping')}`)
     }
     void this.plugin.saveSettings()
 
@@ -373,6 +374,12 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
         newFolder,
         () => void this.plugin.renameCache(oldFolder, newFolder),
         () => { this.plugin.cacheManager = new EagleCacheManager(this.plugin.app, newFolder) },
+        () => {
+          this.plugin.settings.cacheFolderName = oldFolder
+          this.originalCacheFolderName = oldFolder
+          void this.plugin.saveSettings()
+          this.plugin.notices.show('cache_folder_kept', { folder: oldFolder })
+        },
       ).open()
     }
     this.originalCacheFolderName = newFolder

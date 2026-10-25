@@ -30,6 +30,7 @@ export default tseslint.config(
 	{
 		rules: {
 			'depend/ban-dependencies': 'off',
+			'obsidianmd/ui/sentence-case': ['warn', { brands: ['Eagle'] }],
 		},
 	},
 	// Ban common async/type hazards in non-test TypeScript code.

@@ -40,6 +40,14 @@
   align-content: start;
 }
 
+.eagle-picker-empty-state {
+  grid-column: 1 / -1;
+}
+
+.eagle-picker-empty-state .modal-button-container {
+  justify-content: center;
+}
+
 .eagle-picker-item {
   display: flex;
   flex-direction: column;
