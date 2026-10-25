@@ -390,7 +390,7 @@ export default class EagleUploader {
       await this.getLibraryRootPath()
       return true
     } catch (err) {
-      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- String() is intentional fallback for unknown catch value
+       
       this.log.debug('isConnected check failed', { err: String(err) })
       return false
     }
@@ -423,7 +423,7 @@ export default class EagleUploader {
       const data = parseItemInfoResponse(await this.requestJson(url, 'GET'))
       return data.status === 'success' && !data.data?.isDeleted
     } catch (err) {
-      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- String() is intentional fallback for unknown catch value
+       
       this.log.debug('itemExists check failed — treating as uncertain', { itemId, err: String(err) })
       return null
     }

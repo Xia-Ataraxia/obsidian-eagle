@@ -55,6 +55,7 @@ export class UploadService {
       imageInEditor.image.start,
       imageInEditor.image.end,
     )
+    if (!remoteMarkdownImage) return
 
     this.proposeToReplaceOtherLocalLinksIfAny(imageInEditor.image.file, remoteMarkdownImage, {
       path: imageInEditor.noteFile.path,

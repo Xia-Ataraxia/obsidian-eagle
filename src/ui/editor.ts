@@ -31,6 +31,8 @@ export const findLocalFileUnderCursor = (editor: Editor, ctx: MarkdownFileInfo) 
   const clickableSuffix = editor.getRange(clickable.end, localImageExpectedEnd)
   if (clickablePrefix !== '![[' || clickableSuffix !== ']]') return null
 
+  if (!ctx.file) return null
+
   const lt = parseLinktext(clickable.text)
   const linkedFile = ctx.app.metadataCache.getFirstLinkpathDest(lt.path, ctx.file.path)
   if (!linkedFile) return null
@@ -51,7 +53,7 @@ export const findLocalFileUnderCursor = (editor: Editor, ctx: MarkdownFileInfo) 
 export const replaceFirstOccurrence = (editor: Editor, target: string, replacement: string) => {
   const lines = editor.getValue().split('\n')
   for (let i = 0; i < lines.length; i += 1) {
-    const ch = lines[i].indexOf(target)
+    const ch = (lines[i] ?? '').indexOf(target)
     if (ch !== -1) {
       const from = { line: i, ch }
       const to = { line: i, ch: ch + target.length }

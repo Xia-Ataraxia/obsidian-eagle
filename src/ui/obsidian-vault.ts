@@ -42,6 +42,7 @@ export async function replaceAllLocalReferencesWithRemoteOne(
 ) {
   for (const [notePath, refs] of Object.entries(allFileReferencesByNotes)) {
     const noteFile = vault.getFileByPath(notePath)
+    if (!noteFile) continue
     const refsStartOffsetsSortedDescending = refs
       .map((ref) => ({
         start: ref.position.start.offset,

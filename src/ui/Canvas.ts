@@ -10,7 +10,7 @@ export function createEagleCanvasPasteHandler(
   plugin: EaglePlugin,
   originalPasteHandler: (e: ClipboardEvent) => Promise<void>,
 ) {
-  return function (e: ClipboardEvent) {
+  return function (this: { canvas: Canvas }, e: ClipboardEvent) {
     return eagleCanvasPaste.call(this, plugin, originalPasteHandler, e)
   }
 }
@@ -21,8 +21,8 @@ async function eagleCanvasPaste(
   originalPasteHandler: (e: ClipboardEvent) => Promise<void>,
   e: ClipboardEvent,
 ) {
-  const { files } = e.clipboardData
-  if (!allFilesAreImages(files) || files.length != 1) {
+  const files = e.clipboardData?.files
+  if (!files || !allFilesAreImages(files) || files.length != 1) {
     await originalPasteHandler.call(this, e)
     return
   }
@@ -41,6 +41,9 @@ async function uploadImageOnCanvas(
   plugin: EaglePlugin,
   e: ClipboardEvent,
 ): Promise<void> {
+  const file = e.clipboardData?.files[0]
+  if (!file) return
+
   const modal = new ImageUploadBlockingModal(plugin.app)
   modal.open()
 
@@ -49,7 +52,6 @@ async function uploadImageOnCanvas(
     controller.abort()
   }
 
-  const file = e.clipboardData.files[0]
   const folderName = plugin.resolveTargetEagleFolderForActiveFile()
 
   try {

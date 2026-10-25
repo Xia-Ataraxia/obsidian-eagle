@@ -21,7 +21,7 @@ export class CacheSyncService {
 
     // Collect all old-format tokens (stem has no underscore before the itemId).
     // New-format tokens already have displayName set, so we skip them.
-    const tokensByFile = new Map<string, { file: ReturnType<typeof this.plugin.app.vault.getMarkdownFiles>[number]; content: string; tokens: WikilinkEmbedToken[] }>()
+    const tokensByFile = new Map<string, { file: TFile; content: string; tokens: WikilinkEmbedToken[] }>()
 
     await Promise.all(
       this.plugin.app.vault.getMarkdownFiles().map(async (file) => {
@@ -88,7 +88,7 @@ export class CacheSyncService {
             return { start: t.start, end: t.end, text: wikilinkForCacheItem(cacheFolder, t.itemId, t.ext, displayName) }
           })
         if (replacements.length > 0) {
-          await this.plugin.app.vault.modify(file as import('obsidian').TFile, applyTextReplacements(content, replacements))
+          await this.plugin.app.vault.modify(file, applyTextReplacements(content, replacements))
         }
       }),
     )
@@ -122,8 +122,8 @@ export class CacheSyncService {
     const uncached = entries
       .filter((_, i) => {
         const result = cachedResults[i]
-        if (result.status === 'rejected') {
-          this.plugin.log.warn('isCached check failed, treating as uncached', { id: entries[i][0] })
+        if (!result || result.status === 'rejected') {
+          this.plugin.log.warn('isCached check failed, treating as uncached', { id: entries[i]?.[0] })
           return true // attempt sync anyway
         }
         return !result.value

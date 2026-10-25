@@ -54,15 +54,15 @@ export default class EaglePlugin extends Plugin {
   readonly log = new PluginLogger('Eagle')
   declare settings: EaglePluginSettings
 
-  notices: PluginNotices
+  declare notices: PluginNotices
 
-  private _eagleUploader: EagleUploader
+  private declare _eagleUploader: EagleUploader
 
   get eagleUploader(): EagleUploader {
     return this._eagleUploader
   }
 
-  private _cacheManager: EagleCacheManager
+  private declare _cacheManager: EagleCacheManager
 
   get cacheManager(): EagleCacheManager {
     return this._cacheManager
@@ -72,7 +72,7 @@ export default class EaglePlugin extends Plugin {
     this._cacheManager = manager
   }
 
-  private _hashStore: EagleHashStore
+  private declare _hashStore: EagleHashStore
 
   get hashStore(): EagleHashStore {
     return this._hashStore
@@ -97,23 +97,24 @@ export default class EaglePlugin extends Plugin {
   })
 
   private customPasteEventCallback = (e: ClipboardEvent) => {
-    this.uploads.handleImageFiles(e.clipboardData.files, e)
+    if (e.clipboardData) this.uploads.handleImageFiles(e.clipboardData.files, e)
   }
 
   private customDropEventListener = (e: DragEvent) => {
-    this.uploads.handleImageFiles(e.dataTransfer.files, e)
+    if (e.dataTransfer) this.uploads.handleImageFiles(e.dataTransfer.files, e)
   }
 
-  private eaglePluginRightClickHandler = (menu: Menu, editor: Editor, view: MarkdownView) => {
+  private eaglePluginRightClickHandler = (menu: Menu, editor: Editor, view: MarkdownView | MarkdownFileInfo) => {
     const localFile = findLocalFileUnderCursor(editor, view)
-    if (!localFile) return
+    const noteFile = view.file
+    if (!localFile || !noteFile) return
 
     menu.addItem((item) =>
       item
         .setTitle('Upload to eagle')
         .setIcon('upload')
         .onClick(() => {
-          void this.uploads.doUploadLocalImage({ image: localFile, editor, noteFile: view.file })
+          void this.uploads.doUploadLocalImage({ image: localFile, editor, noteFile })
         }),
     )
   }
@@ -261,10 +262,12 @@ export default class EaglePlugin extends Plugin {
     ctx: MarkdownFileInfo,
   ) => {
     const localFile = findLocalFileUnderCursor(editor, ctx)
-    if (!localFile) return false
+    const noteFile = ctx.file
+    if (!localFile || !noteFile) return false
     if (checking) return true
 
-    void this.uploads.doUploadLocalImage({ image: localFile, editor, noteFile: ctx.file })
+    void this.uploads.doUploadLocalImage({ image: localFile, editor, noteFile })
+    return true
   }
 
   private editorCheckCallbackForLibraryImport = (checking: boolean, editor: Editor) => {

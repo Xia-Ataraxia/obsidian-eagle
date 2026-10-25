@@ -80,6 +80,7 @@ function removeReferenceIfPresent(
   if (!Object.keys(referencesByNote).includes(referenceToRemove.path)) return
 
   const refsFromOriginalNote = referencesByNote[referenceToRemove.path]
+  if (!refsFromOriginalNote) return
   const originalRefStart = referenceToRemove.startPosition
   const refForExclusion = refsFromOriginalNote.find(
     (r) =>
