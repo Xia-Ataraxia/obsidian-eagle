@@ -7,7 +7,9 @@ export default class ImageUploadBlockingModal extends Modal {
 
   override onOpen(): void {
     this.titleEl.setText('Eagle plugin')
-    this.contentEl.setText('Uploading image...')
+    this.modalEl.addClass('eagle-upload-modal')
+    this.contentEl.createEl('p', { text: 'Uploading image...' })
+    this.contentEl.createDiv({ cls: 'eagle-upload-progress' })
 
     this.buttonsDiv = this.modalEl.createDiv('modal-button-container')
 
@@ -23,7 +25,9 @@ export default class ImageUploadBlockingModal extends Modal {
 
   showError(message: string): void {
     if (!this.isOpen) return
-    this.contentEl.setText(message)
+    this.contentEl.empty()
+    this.contentEl.createEl('p', { text: message, cls: 'eagle-upload-error' })
+    this.modalEl.addClass('is-error')
     this.buttonsDiv.empty()
     new ButtonComponent(this.buttonsDiv)
       .setButtonText('Close')
