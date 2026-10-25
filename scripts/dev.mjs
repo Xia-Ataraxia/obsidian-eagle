@@ -226,10 +226,10 @@ function startFileSync(selectedVaults, pluginId, watchFiles) {
     let debounceTimer = null;
     fs.watch(sourceFile, () => {
       if (debounceTimer !== null) {
-        window.clearTimeout(debounceTimer);
+        clearTimeout(debounceTimer);
       }
 
-      debounceTimer = window.setTimeout(() => {
+      debounceTimer = setTimeout(() => {
         let hadError = false;
         for (const vaultPath of selectedVaults) {
           const pluginDir = path.join(vaultPath, '.obsidian', 'plugins', pluginId);
@@ -273,7 +273,7 @@ function startFileSync(selectedVaults, pluginId, watchFiles) {
         return;
       }
 
-      window.setTimeout(waitForFile, 500);
+      setTimeout(waitForFile, 500);
     };
 
     console.log(`  Waiting for ${file.from} to be created by build...`);
