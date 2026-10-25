@@ -1,5 +1,7 @@
 import { Plugin } from 'obsidian'
 
+import { HASH_STORE_KEY as STORE_KEY } from '../domain/settings'
+
 import { PluginLogger } from '../utils/plugin-logger'
 
 interface HashEntry {
@@ -14,7 +16,6 @@ interface EagleHashStoreData {
   entries: Record<string, HashEntry>
 }
 
-export const STORE_KEY = 'eagle-hash-store'
 const STORE_VERSION = 1
 
 export default class EagleHashStore {
@@ -45,9 +46,8 @@ export default class EagleHashStore {
     }
   }
 
-  async load(plugin: Plugin): Promise<void> {
+  load(raw: Record<string, unknown> | null): void {
     try {
-      const raw = (await plugin.loadData()) as Record<string, unknown> | null
       if (raw && typeof raw === 'object' && STORE_KEY in raw) {
         const stored = raw[STORE_KEY] as EagleHashStoreData
         if (stored?.version === STORE_VERSION && stored.entries) {
