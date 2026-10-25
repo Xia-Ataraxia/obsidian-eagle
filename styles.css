@@ -249,8 +249,13 @@
   height: 14px;
 }
 
+@keyframes eagle-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .eagle-skeleton-card {
-    animation: none;
+    animation: eagle-pulse 2.4s ease-in-out infinite;
   }
 }
