@@ -258,7 +258,7 @@ export class UploadService {
     return this.markdownImageFor(itemId, ext, displayName)
   }
 
-  private async saveAsLocalAttachment(file: File): Promise<string> {
+  async saveAsLocalAttachment(file: File): Promise<string> {
     const { fileManager, vault, workspace } = this.plugin.app
     const sourcePath = workspace.getActiveFile()?.path ?? ''
     const path = await fileManager.getAvailablePathForAttachment(file.name || 'Pasted image.png', sourcePath)
