@@ -3,6 +3,7 @@ import type EaglePlugin from '../main'
 import EagleCacheManager from '../ui/EagleCacheManager'
 import { safeCacheFolderPath, safePathSegment, wikilinkForCacheItem } from '../utils/eagle-path-contract'
 import { applyTextReplacements, findEagleWikilinkTokens } from '../utils/markdown-image'
+import { countLabel } from '../utils/plural'
 
 export async function renameCache(plugin: EaglePlugin, oldFolder: string, newFolder: string): Promise<void> {
   // Step 1: Update wikilinks in all markdown files
@@ -47,16 +48,19 @@ export async function renameCache(plugin: EaglePlugin, oldFolder: string, newFol
         }
       }),
     )
-    // Remove the now-empty old folder
-    await plugin.app.vault.adapter.rmdir(oldFolder, false).catch(() => {/* ignore if not empty */})
+    // Non-recursive rmdir fails with EISDIR even on empty folders, so verify emptiness and remove recursively.
+    const remaining = await plugin.app.vault.adapter.list(oldFolder)
+    if (remaining.files.length === 0 && remaining.folders.length === 0) {
+      await plugin.app.vault.adapter.rmdir(oldFolder, true).catch(() => plugin.log.warn('failed to remove old cache folder', { oldFolder }))
+    }
   } catch {
     // oldFolder doesn't exist or is empty — that's fine
   }
 
   plugin.notices.show('cache_renamed', {
     newFolder: safeNewFolder,
-    linksCount: updatedLinks,
-    filesCount: updatedFiles,
-    movedFiles,
+    links: countLabel(updatedLinks, 'link'),
+    files: countLabel(updatedFiles, 'file'),
+    moved: countLabel(movedFiles, 'file'),
   })
 }

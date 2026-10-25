@@ -43,7 +43,7 @@ export default class RenameCacheModal extends Modal {
 
   override onClose() {
     this.contentEl.empty()
-    // Skip, Esc and click-outside all leave old files in place but must still point new caches at the new folder.
+    // Skip, Esc and click-outside keep the old folder, so the setting must revert to match the files and cacheManager.
     if (!this.confirmed) this.onSkip()
   }
 }

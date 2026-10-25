@@ -22,6 +22,7 @@ import { allFilesAreImages } from '../utils/FileList'
 import { wikilinkForCacheItem } from '../utils/eagle-path-contract'
 import { extractFileExtension } from '../utils/image-format'
 import { resolveItemName } from '../utils/item-naming'
+import { countLabel } from '../utils/plural'
 import { generatePseudoRandomId } from '../utils/pseudo-random'
 
 export interface LocalImageInEditor {
@@ -110,7 +111,7 @@ export class UploadService {
           this.plugin.log.error('Something bad happened during links update', e)
         })
         .finally(() => dialogBox.close())
-      this.plugin.notices.show('links_updated', { linksCount: stats.linksCount, filesCount: stats.filesCount })
+      this.plugin.notices.show('links_updated', { links: countLabel(stats.linksCount, 'link'), files: countLabel(stats.filesCount, 'file') })
     })
     dialogBox.open()
   }
