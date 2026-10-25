@@ -28,6 +28,7 @@ import { UploadService } from './services/upload'
 import { eagleItemIdFromAlt, eagleItemIdFromLink } from './utils/eagle-item-id'
 import { safeCacheFolderPath } from './utils/eagle-path-contract'
 import { extractFileExtension } from './utils/image-format'
+import { SerializedDataFile } from './utils/serialized-data-file'
 
 const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
   links_updated: { template: 'Updated {{links}} in {{files}}' },
@@ -80,6 +81,7 @@ export default class EaglePlugin extends Plugin {
     return this._hashStore
   }
 
+  private readonly dataFile = new SerializedDataFile(this)
   private readonly uploads = new UploadService(this)
   private readonly cacheSync = new CacheSyncService(this)
   private readonly imageMigration = new ImageMigrationService(this)
@@ -132,8 +134,12 @@ export default class EaglePlugin extends Plugin {
   async saveSettings(): Promise<void> {
     this.settings.folderMappings = sanitizeFolderMappings(this.settings.folderMappings ?? [])
     this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
-    const existing = ((await this.loadData()) as Record<string, unknown>) ?? {}
-    await this.saveData({ ...existing, ...this.settings })
+    await this.mergeData(() => ({ ...this.settings }))
+  }
+
+  /** The only path to data.json; settings and the hash store both write through it. */
+  mergeData(patch: () => Record<string, unknown>): Promise<void> {
+    return this.dataFile.merge(patch)
   }
 
   override onload() {
