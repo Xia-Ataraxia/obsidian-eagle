@@ -347,10 +347,10 @@ export default class EagleUploader {
 
       await new Promise<void>((resolve, reject) => {
         const onAbort = () => {
-          clearTimeout(timer)
+          window.clearTimeout(timer)
           reject(new DOMException('Upload cancelled', 'AbortError'))
         }
-        const timer = setTimeout(() => {
+        const timer = window.setTimeout(() => {
           signal?.removeEventListener('abort', onAbort)
           resolve()
         }, EAGLE_PROCESSING_DELAY_MS)

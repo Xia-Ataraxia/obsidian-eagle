@@ -2,15 +2,8 @@
 import tseslint from 'typescript-eslint';
 import obsidianmd from 'eslint-plugin-obsidianmd';
 import globals from 'globals';
+import vitestPlugin from '@vitest/eslint-plugin';
 import { globalIgnores } from 'eslint/config';
-
-let vitestPlugin = null;
-try {
-	const imported = await import('eslint-plugin-vitest');
-	vitestPlugin = imported.default ?? imported;
-} catch {
-	vitestPlugin = null;
-}
 
 export default tseslint.config(
 	{
@@ -18,7 +11,7 @@ export default tseslint.config(
 			globals: { ...globals.browser, ...globals.nodeBuiltin },
 			parserOptions: {
 				projectService: {
-					allowDefaultProject: ['eslint.config.js', 'vitest.config.ts', 'manifest.json'],
+					allowDefaultProject: ['eslint.config.mts', 'vitest.config.ts', 'manifest.json'],
 				},
 				tsconfigRootDir: import.meta.dirname,
 				extraFileExtensions: ['.json'],
@@ -93,29 +86,31 @@ export default tseslint.config(
 			'import/no-nodejs-modules': 'off',
 		},
 	},
-	// Script files (.mjs): run in Node.js, need node globals.
+	// Script files (.mjs): Node CLI scripts outside tsconfig; untyped lint, console output is their UI.
 	{
 		files: ['scripts/**/*.mjs', 'tooling/**/*.mjs', '*.mjs'],
+		extends: [tseslint.configs.disableTypeChecked],
 		languageOptions: {
 			globals: { ...globals.node },
+			parserOptions: { projectService: false },
 		},
 		rules: {
 			'import/no-nodejs-modules': 'off',
+			'no-console': 'off',
+			'obsidianmd/rule-custom-message': 'off',
 		},
 	},
 	// Test files: relax rules that don't apply to test code.
 	{
 		files: ['test/**/*.ts', '__tests__/**/*.ts'],
-		plugins: vitestPlugin ? { vitest: vitestPlugin } : {},
+		plugins: { vitest: vitestPlugin },
 		languageOptions: {
 			globals: { ...globals.node },
 		},
 		rules: {
-			...(vitestPlugin ? {
-				'vitest/expect-expect': 'error',
-				'vitest/no-disabled-tests': 'warn',
-				'vitest/no-conditional-tests': 'error',
-			} : {}),
+			'vitest/expect-expect': 'error',
+			'vitest/no-disabled-tests': 'warn',
+			'vitest/no-conditional-tests': 'error',
 			'@typescript-eslint/no-explicit-any': 'off',
 			'@typescript-eslint/no-misused-promises': 'off',
 			'@typescript-eslint/no-redundant-type-constituents': 'off',
