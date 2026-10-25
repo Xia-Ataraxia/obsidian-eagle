@@ -43,7 +43,7 @@ const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
   },
   connection_ok: { template: 'Connected to Eagle' },
   connection_fail: { template: 'Cannot reach Eagle — check host/port' },
-  saved_locally: { template: 'Eagle unavailable — image saved to your vault. Run "Upload to Eagle" on it later.', timeout: 8000 },
+  saved_locally: { template: 'Eagle unavailable. Image saved to your vault.', timeout: 5000 },
 }
 
 interface CanvasView {
