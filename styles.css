@@ -248,3 +248,9 @@
   width: 14px;
   height: 14px;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .eagle-skeleton-card {
+    animation: none;
+  }
+}
