@@ -1,4 +1,3 @@
-// Repo-local shared helper for obsidian-eagle-plugin.
 import { Notice, setIcon } from 'obsidian';
 
 export interface NoticeDefinition {

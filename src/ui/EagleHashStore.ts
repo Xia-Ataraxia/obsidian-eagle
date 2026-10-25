@@ -1,6 +1,6 @@
 import { Plugin } from 'obsidian'
 
-import { PluginLogger } from '../shared/plugin-logger'
+import { PluginLogger } from '../utils/plugin-logger'
 
 interface HashEntry {
   itemId: string

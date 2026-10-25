@@ -1,6 +1,3 @@
-// Repo-local shared helper for obsidian-eagle-plugin.
-import { Notice } from 'obsidian';
-
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export class PluginLogger {
@@ -36,11 +33,6 @@ export class PluginLogger {
 		} catch {
 			return ` | [unserializable]`;
 		}
-	}
-
-	noticeError(message: string, error?: unknown): void {
-		this.error(message, error);
-		new Notice(`[${this.prefix}] ${message}`);
 	}
 
 	private format(level: LogLevel, message: string, data?: Record<string, unknown>): string {

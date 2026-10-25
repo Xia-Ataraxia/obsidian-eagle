@@ -1,31 +1,12 @@
-# Intellij
-*.iml
-.idea
-
-# npm
 node_modules
-
-
-# build
-main.js
-*.js.map
-release/
-!.claude/skills/release/
-
-# eslint
-.eslintcache
-
-# c8
-coverage/
-
-test-results.xml
-
-# env
-.env
-
-# Obsidian dev
-.hotreload
+dist/
+*.map
 data.json
+.DS_Store
+.env
+.eslintcache
+coverage/
+test-results.xml
 .claude/
-.omc/state/hud-stdin-cache.json
 .omc/
+.dev-vault/

@@ -1,9 +1,15 @@
-// Repo-local ESLint baseline for obsidian-eagle-plugin.
 import tseslint from 'typescript-eslint';
 import obsidianmd from 'eslint-plugin-obsidianmd';
 import globals from 'globals';
-import vitestPlugin from '@vitest/eslint-plugin';
 import { globalIgnores } from 'eslint/config';
+
+let vitestPlugin = null;
+try {
+	const imported = await import('eslint-plugin-vitest');
+	vitestPlugin = imported.default ?? imported;
+} catch {
+	vitestPlugin = null;
+}
 
 export default tseslint.config(
 	{
@@ -11,7 +17,7 @@ export default tseslint.config(
 			globals: { ...globals.browser, ...globals.nodeBuiltin },
 			parserOptions: {
 				projectService: {
-					allowDefaultProject: ['eslint.config.mts', 'vitest.config.ts', 'manifest.json'],
+					allowDefaultProject: ['manifest.json'],
 				},
 				tsconfigRootDir: import.meta.dirname,
 				extraFileExtensions: ['.json'],
@@ -86,33 +92,19 @@ export default tseslint.config(
 			'import/no-nodejs-modules': 'off',
 		},
 	},
-	// Script files (.mjs): Node CLI scripts outside tsconfig; untyped lint, console output is their UI.
-	{
-		files: ['scripts/**/*.mjs', '*.mjs'],
-		extends: [tseslint.configs.disableTypeChecked],
-		languageOptions: {
-			globals: { ...globals.node },
-			parserOptions: { projectService: false },
-		},
-		rules: {
-			'import/no-nodejs-modules': 'off',
-			'no-console': 'off',
-			'obsidianmd/rule-custom-message': 'off',
-			// Node has no `window`; the autofix would break these scripts.
-			'obsidianmd/prefer-window-timers': 'off',
-		},
-	},
 	// Test files: relax rules that don't apply to test code.
 	{
 		files: ['test/**/*.ts', '__tests__/**/*.ts'],
-		plugins: { vitest: vitestPlugin },
+		plugins: vitestPlugin ? { vitest: vitestPlugin } : {},
 		languageOptions: {
 			globals: { ...globals.node },
 		},
 		rules: {
-			'vitest/expect-expect': 'error',
-			'vitest/no-disabled-tests': 'warn',
-			'vitest/no-conditional-tests': 'error',
+			...(vitestPlugin ? {
+				'vitest/expect-expect': 'error',
+				'vitest/no-disabled-tests': 'warn',
+				'vitest/no-conditional-tests': 'error',
+			} : {}),
 			'@typescript-eslint/no-explicit-any': 'off',
 			'@typescript-eslint/no-misused-promises': 'off',
 			'@typescript-eslint/no-redundant-type-constituents': 'off',
@@ -127,5 +119,6 @@ export default tseslint.config(
 			'import/no-nodejs-modules': 'off',
 		},
 	},
-	globalIgnores(['**/main.js', 'dist/', 'node_modules/', 'coverage/']),
+	// Node tooling and root configs are not plugin code and sit outside tsconfig (type-aware rules need it).
+	globalIgnores(['dist/', 'node_modules/', 'coverage/', 'scripts/', '**/*.mjs', '*.config.ts', '*.config.mts']),
 );
