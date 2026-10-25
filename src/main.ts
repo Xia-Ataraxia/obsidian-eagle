@@ -15,7 +15,7 @@ import { PluginLogger } from './utils/plugin-logger'
 import { NoticeCatalog, PluginNotices } from './ui/plugin-notices'
 import { createEagleCanvasPasteHandler } from './ui/Canvas'
 import EagleCacheManager from './ui/EagleCacheManager'
-import EagleHashStore from './ui/EagleHashStore'
+import EagleHashStore, { STORE_KEY } from './ui/EagleHashStore'
 import EaglePluginSettingsTab from './ui/EaglePluginSettingsTab'
 import EagleSearchPickerModal from './ui/EagleSearchPickerModal'
 import EagleUploader, { type EagleItemSearchResult } from './ui/EagleUploader'
@@ -120,9 +120,11 @@ export default class EaglePlugin extends Plugin {
   }
 
   private async loadSettings() {
+    // data.json also holds the hash store; keep it out of settings so saveSettings() can't overwrite newer entries with this stale copy.
+    const { [STORE_KEY]: _hashStore, ...saved } = ((await this.loadData()) as Record<string, unknown> | null) ?? {}
     this.settings = {
       ...DEFAULT_SETTINGS,
-      ...((await this.loadData()) as EaglePluginSettings),
+      ...(saved as Partial<EaglePluginSettings>),
     }
 
     this.settings.folderMappings = sanitizeFolderMappings(this.settings.folderMappings ?? [])

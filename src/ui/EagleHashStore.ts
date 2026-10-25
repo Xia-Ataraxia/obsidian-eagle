@@ -14,7 +14,7 @@ interface EagleHashStoreData {
   entries: Record<string, HashEntry>
 }
 
-const STORE_KEY = 'eagle-hash-store'
+export const STORE_KEY = 'eagle-hash-store'
 const STORE_VERSION = 1
 
 export default class EagleHashStore {
