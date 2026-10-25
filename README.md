@@ -151,7 +151,7 @@ obsidian-eagle-plugin/
 │   │   ├── markdown-image.ts    # Markdown parsing
 │   │   └── item-naming.ts       # Naming templates
 │   └── types/
-├── test/                        # Unit + e2e tests
+├── test/                        # Unit tests
 ├── scripts/                     # Build & release
 └── manifest.json
 ```
@@ -165,7 +165,6 @@ pnpm build        # Production build
 pnpm test         # Unit tests
 pnpm lint         # ESLint
 pnpm run ci       # Build + lint + test (pre-release check)
-pnpm e2e          # WebdriverIO end-to-end tests
 ```
 
 `scripts/`, `.github/workflows/`, and `src/shared/` are repo-local helpers in this plugin. Keep them aligned with shared harness expectations when relevant, but treat implementation details here as the source of truth.
