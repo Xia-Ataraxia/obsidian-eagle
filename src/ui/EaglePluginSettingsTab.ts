@@ -14,7 +14,9 @@ import type EaglePlugin from '../main'
 
 import { resolveDestinationPreview, sanitizeFolderMappings } from '../domain/folder-mapping'
 import { ObsidianEagleFolderMapping } from '../domain/settings'
+import { countLabel } from '../utils/plural'
 import { PluginLogger } from '../utils/plugin-logger'
+import EagleCacheManager from './EagleCacheManager'
 import { EagleFolderWithPath } from './EagleUploader'
 import RenameCacheModal from './RenameCacheModal'
 import VaultFolderSuggestModal from './VaultFolderSuggestModal'
@@ -359,7 +361,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     )
     const removed = before - this.plugin.settings.folderMappings.length
     if (removed > 0) {
-      new Notice(`Eagle: removed ${removed} incomplete folder mapping(s)`)
+      new Notice(`Eagle: removed ${countLabel(removed, 'incomplete folder mapping')}`)
     }
     void this.plugin.saveSettings()
 
@@ -371,10 +373,12 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
         oldFolder,
         newFolder,
         () => void this.plugin.renameCache(oldFolder, newFolder),
+        () => { this.plugin.cacheManager = new EagleCacheManager(this.plugin.app, newFolder) },
         () => {
           this.plugin.settings.cacheFolderName = oldFolder
           this.originalCacheFolderName = oldFolder
           void this.plugin.saveSettings()
+          this.plugin.notices.show('cache_folder_kept', { folder: oldFolder })
         },
       ).open()
     }

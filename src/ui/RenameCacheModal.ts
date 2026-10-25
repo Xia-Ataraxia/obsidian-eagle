@@ -7,11 +7,12 @@ export default class RenameCacheModal extends Modal {
     private readonly newFolder: string,
     private readonly onConfirm: () => void,
     private readonly onSkip: () => void,
+    private readonly onDismiss: () => void,
   ) {
     super(app)
   }
 
-  private confirmed = false
+  private choice: 'move' | 'skip' | null = null
 
   override onOpen() {
     const { contentEl } = this
@@ -24,6 +25,10 @@ export default class RenameCacheModal extends Modal {
     contentEl.createEl('p', {
       text: 'Move existing cached files and update all wikilinks in your vault?',
     })
+    contentEl.createEl('p', {
+      cls: 'setting-item-description',
+      text: `If you skip, new images use '${this.newFolder}' and existing files stay in '${this.oldFolder}'.`,
+    })
 
     const buttonsDiv = this.modalEl.createDiv('modal-button-container')
 
@@ -31,19 +36,21 @@ export default class RenameCacheModal extends Modal {
       .setButtonText('Move & update')
       .setCta()
       .onClick(() => {
-        this.confirmed = true
+        this.choice = 'move'
         this.close()
         this.onConfirm()
       })
 
     new ButtonComponent(buttonsDiv).setButtonText('Skip').onClick(() => {
+      this.choice = 'skip'
       this.close()
     })
   }
 
   override onClose() {
     this.contentEl.empty()
-    // Skip, Esc and click-outside keep the old folder, so the setting must revert to match the files and cacheManager.
-    if (!this.confirmed) this.onSkip()
+    // Skip keeps the new folder for new images; Esc and click-outside cancel the rename.
+    if (this.choice === 'skip') this.onSkip()
+    else if (this.choice === null) this.onDismiss()
   }
 }

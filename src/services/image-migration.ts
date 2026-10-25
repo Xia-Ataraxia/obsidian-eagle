@@ -7,6 +7,7 @@ import { wikilinkForCacheItem } from '../utils/eagle-path-contract'
 import { eagleItemIdFromAlt } from '../utils/eagle-item-id'
 import { extractFileExtension } from '../utils/image-format'
 import { applyTextReplacements, findMarkdownImageTokens } from '../utils/markdown-image'
+import { countLabel } from '../utils/plural'
 
 interface OldFormatMatch {
   token: ReturnType<typeof findMarkdownImageTokens>[number]
@@ -105,6 +106,6 @@ export class ImageMigrationService {
       const extra = failedIds.size > 3 ? ` and ${failedIds.size - 3} more` : ''
       failureSuffix = ` Failed: ${failedIds.size} (${sample}${extra})`
     }
-    this.plugin.notices.show('migrate_done', { count: migratedCount, folder: `${cacheFolderName}/`, failureSuffix })
+    this.plugin.notices.show('migrate_done', { images: countLabel(migratedCount, 'image'), folder: `${cacheFolderName}/`, failureSuffix })
   }
 }

@@ -1,6 +1,7 @@
 import { App, ButtonComponent, Modal, TextComponent } from 'obsidian'
 
 import EagleApiError from '../domain/EagleApiError'
+import { countLabel } from '../utils/plural'
 import { PluginLogger } from '../utils/plugin-logger'
 import type { EagleItemSearchResult, EagleSearchPickerUploader } from '../types/eagle-uploader-types'
 import { fileUrlToDisplayUrl } from './file-url'
@@ -165,7 +166,7 @@ export default class EagleSearchPickerModal extends Modal {
       if (results.length === 0) {
         this.setStatus(`No results for "${keyword}".`, 'info')
       } else {
-        this.setStatus(`Found ${results.length} result(s). Select one to insert.`, 'info')
+        this.setStatus(`Found ${countLabel(results.length, 'result')}. Select one to insert.`, 'info')
       }
       this.renderGrid(token)
     } catch (error) {

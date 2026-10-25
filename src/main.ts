@@ -32,7 +32,7 @@ import { extractFileExtension } from './utils/image-format'
 const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
   links_updated: { template: 'Updated {{links}} in {{files}}' },
   migrate_none: { template: 'No images to migrate.' },
-  migrate_done: { template: 'Migrated {{count}} image(s) to {{folder}}.{{failureSuffix}}', timeout: 8000 },
+  migrate_done: { template: 'Migrated {{images}} to {{folder}}.{{failureSuffix}}', timeout: 8000 },
   import_failed_api: { template: 'Failed to import from Eagle: {{message}}' },
   import_failed: { template: 'Failed to insert Eagle image.' },
   no_active_editor: { template: 'No active editor — cannot upload.' },
@@ -41,6 +41,7 @@ const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
     template: "Moved cache to '{{newFolder}}'. Updated {{links}} in {{files}}, moved {{moved}}.",
     timeout: 10000,
   },
+  cache_folder_kept: { template: "Kept cache folder '{{folder}}'." },
   connection_ok: { template: 'Connected to Eagle' },
   connection_fail: { template: 'Cannot reach Eagle — check host/port' },
   saved_locally: { template: 'Eagle unavailable. Image saved to your vault.', timeout: 5000 },
