@@ -64,7 +64,7 @@ export default class EagleSearchPickerModal extends Modal {
 
     this.statusEl = contentEl.createEl('p', {
       cls: 'eagle-picker-status',
-      text: 'Type a keyword to search eagle images.',
+      text: 'Type a keyword to search Eagle images.',
     })
 
     this.gridEl = contentEl.createDiv({ cls: 'eagle-picker-grid' })
@@ -129,7 +129,7 @@ export default class EagleSearchPickerModal extends Modal {
     if (!keyword) {
       this.results = []
       this.thumbFallbackMap.clear()
-      this.setStatus('Type a keyword to search eagle images.', 'idle')
+      this.setStatus('Type a keyword to search Eagle images.', 'idle')
       this.renderGrid()
       return
     }
@@ -232,7 +232,7 @@ export default class EagleSearchPickerModal extends Modal {
             this.keywordInput.setValue('')
             this.results = []
             this.thumbFallbackMap.clear()
-            this.setStatus('Type a keyword to search eagle images.', 'idle')
+            this.setStatus('Type a keyword to search Eagle images.', 'idle')
             this.renderGrid()
             this.keywordInput.inputEl.focus()
           })

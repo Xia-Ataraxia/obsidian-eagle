@@ -64,8 +64,8 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
         type: 'group',
         heading: 'Connection',
         items: [
-          { name: 'Eagle API host', desc: 'The host for your running eagle instance.', control: { type: 'text', key: 'eagleHost', placeholder: 'Localhost' } },
-          { name: 'Eagle API port', desc: 'The port for your running eagle instance.', control: { type: 'number', key: 'eaglePort', placeholder: '41595', min: 1, max: 65535, defaultValue: 41595 } },
+          { name: 'Eagle API host', desc: 'The host for your running Eagle instance.', control: { type: 'text', key: 'eagleHost', placeholder: 'Localhost' } },
+          { name: 'Eagle API port', desc: 'The port for your running Eagle instance.', control: { type: 'number', key: 'eaglePort', placeholder: '41595', min: 1, max: 65535, defaultValue: 41595 } },
           { name: 'Test connection', desc: 'Verify that eagle is reachable with the current host and port.', render: (setting) => this.renderConnectionTest(setting) },
         ],
       },
