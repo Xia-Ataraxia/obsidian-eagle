@@ -1,4 +1,4 @@
-/* global $, $$, WebdriverIO */
+/* global $, $$, WebdriverIO -- wdio runtime globals */
 import ObsidianApp from './obsidian-app.page'
 
 class ObsidianSettings {

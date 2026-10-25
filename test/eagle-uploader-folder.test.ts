@@ -33,13 +33,13 @@ describe(EagleUploader.name, () => {
       requestCalls += 1
 
       if (url.endsWith('/api/folder/list')) {
-        await new Promise((resolve) => setTimeout(resolve, 10))
+        await new Promise((resolve) => window.setTimeout(resolve, 10))
         return successResponse([])
       }
 
       if (url.endsWith('/api/folder/create')) {
         createCalls += 1
-        await new Promise((resolve) => setTimeout(resolve, 20))
+        await new Promise((resolve) => window.setTimeout(resolve, 20))
         return successResponse({ id: 'folder-1' })
       }
 

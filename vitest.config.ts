@@ -12,6 +12,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['lcov', 'html'],
     },
+    setupFiles: ['test/setup-window.ts'],
     reporters: ['default', 'junit'],
     outputFile: 'test-results.xml',
   },

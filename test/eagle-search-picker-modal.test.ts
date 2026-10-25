@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { EagleItemSearchResult, EagleSearchPickerUploader } from '../src/ui/eagle-uploader-types'
+import type { EagleItemSearchResult } from '../src/ui/eagle-uploader-types'
 
 type ElementListener = (event?: { key?: string; isComposing?: boolean; preventDefault?: () => void }) => void
 
@@ -64,6 +64,10 @@ class FakeElement {
 
   createDiv(options?: { cls?: string; text?: string; attr?: Record<string, string> }): FakeElement {
     return this.createEl('div', options)
+  }
+
+  createSpan(options?: { cls?: string; text?: string; attr?: Record<string, string> }): FakeElement {
+    return this.createEl('span', options)
   }
 
   addEventListener(eventName: string, listener: ElementListener): void {
@@ -176,12 +180,12 @@ describe('EagleSearchPickerModal', () => {
     const onChoose = vi.fn()
 
     const modal = new EagleSearchPickerModal(
-      new App() as unknown as import('obsidian').App,
+      new App() as import('obsidian').App,
       {
         searchItems,
         resolveSearchThumbnailUrl,
         getThumbnailFileUrl,
-      } as EagleSearchPickerUploader,
+      },
       onChoose,
       false,
     )

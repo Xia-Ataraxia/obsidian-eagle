@@ -1,4 +1,4 @@
-/* global browser */
+/* global browser -- wdio runtime globals */
 import { App } from 'obsidian'
 
 import { EAGLE_PLUGIN_ID } from '../../constants'

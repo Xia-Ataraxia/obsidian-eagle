@@ -1,4 +1,4 @@
-/* global browser, $ */
+/* global browser, $ -- wdio runtime globals */
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 
@@ -21,7 +21,7 @@ class ObsidianApp {
 
   async createAndOpenFreshVault() {
     await browser.execute((testVaultDir: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- wdio config requires
       const { ipcRenderer } = require('electron')
       const shouldCreateNewVault = true
       ipcRenderer.sendSync('vault-open', testVaultDir, shouldCreateNewVault)
@@ -143,7 +143,7 @@ class ObsidianApp {
 
   async loadSampleImageToClipboard() {
     await browser.execute((imageBase64: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- wdio config requires
       const { nativeImage, clipboard } = require('electron')
       const dataUrl = 'data:image/png;base64,' + imageBase64
       const sampleImage = nativeImage.createFromDataURL(dataUrl)

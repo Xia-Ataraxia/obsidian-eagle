@@ -1,4 +1,4 @@
-/* global describe, before, context, it, expect */
+/* global describe, before, context, it, expect -- wdio runtime globals */
 import ObsidianApp from './pageobjects/obsidian-app.page'
 import MockingUtils from './utils/mocking'
 
