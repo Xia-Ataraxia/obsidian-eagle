@@ -4,7 +4,7 @@ import { App, requestUrl } from 'obsidian'
 
 import type { NodeDataAdapter, NodeErrnoException } from '../types/obsidian'
 
-import EagleApiError from '../domain/EagleApiError'
+import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { EaglePluginSettings } from '../domain/settings'
 import { type EagleFolderTreeNode, extractResponseMessage, extractSearchItemsData, extractTextMessage, extractThumbnailCandidate, flattenFolderTree, normalizeRequestError, parseCreateFolderResponse, parseFolderList, parseFolderListResponse, parseItemInfoResponse, parseLibraryInfoResponse, parseSearchItemsResponse, parseStringDataResponse } from '../utils/eagle-response-parsers'
 import { PluginLogger } from '../utils/plugin-logger'
@@ -42,8 +42,6 @@ const EAGLE_API_ENDPOINTS = {
 
 const EAGLE_PROCESSING_DELAY_MS = 300
 const EAGLE_URL_PROTOCOL = 'eagle://item/'
-const CONNECTION_ERROR_HINT =
-  'Cannot connect to Eagle. Make sure Eagle is running and API host/port are correct.'
 
 export default class EagleUploader {
   private readonly log = new PluginLogger('Eagle')
@@ -93,8 +91,7 @@ export default class EagleUploader {
         throw error
       }
 
-      const message = normalizeRequestError(error)
-      throw new EagleApiError(`${CONNECTION_ERROR_HINT} ${message}`)
+      throw new EagleUnreachableError(normalizeRequestError(error))
     }
   }
 

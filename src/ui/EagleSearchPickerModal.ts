@@ -1,6 +1,7 @@
 import { App, ButtonComponent, Modal, TextComponent } from 'obsidian'
 
-import EagleApiError from '../domain/EagleApiError'
+import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
+import { searchErrorStatus } from '../domain/search-error'
 import { countLabel } from '../utils/plural'
 import { PluginLogger } from '../utils/plugin-logger'
 import type { EagleItemSearchResult, EagleSearchPickerUploader } from '../types/eagle-uploader-types'
@@ -177,12 +178,14 @@ export default class EagleSearchPickerModal extends Modal {
        
       const message = error instanceof Error ? error.message : String(error)
       this.debugLog('search:error', { token, keyword, message })
-      if (!(error instanceof EagleApiError)) {
+      if (error instanceof EagleUnreachableError) {
+        this.log.error('search: Eagle unreachable', error.detail)
+      } else if (!(error instanceof EagleApiError)) {
         this.log.error('unexpected search error', error)
       }
       this.results = []
       this.thumbFallbackMap.clear()
-      this.setStatus(`Search failed: ${message}`, 'error')
+      this.setStatus(searchErrorStatus(error), 'error')
       this.renderGrid()
     }
   }

@@ -13,6 +13,7 @@ import {
 import type EaglePlugin from '../main'
 
 import { resolveDestinationPreview, sanitizeFolderMappings } from '../domain/folder-mapping'
+import { EagleUnreachableError } from '../domain/EagleApiError'
 import { ObsidianEagleFolderMapping } from '../domain/settings'
 import { countLabel } from '../utils/plural'
 import { PluginLogger } from '../utils/plugin-logger'
@@ -309,7 +310,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
       return folders
     } catch (err) {
       this.updateConnectionBadge(false)
-      if (!(err instanceof Error && err.message.includes('connect'))) {
+      if (!(err instanceof EagleUnreachableError)) {
         this.log.error('unexpected error while loading folder list', err)
       }
       return []
