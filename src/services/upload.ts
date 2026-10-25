@@ -127,14 +127,14 @@ export class UploadService {
     const remoteMarkdownImage = await this.uploadFileAndEmbedEagleImage(fileToUpload, {
       ch: 0,
       line: end.line + 1,
-    })
+    }, false)
     if (remoteMarkdownImage) {
       editor.replaceRange(`<!--${editor.getRange(start, end)}-->`, start, end)
     }
     return remoteMarkdownImage
   }
 
-  async uploadFileAndEmbedEagleImage(file: File, atPos?: EditorPosition) {
+  async uploadFileAndEmbedEagleImage(file: File, atPos?: EditorPosition, saveLocallyOnFailure = true) {
     if (!this.activeEditor) {
       this.plugin.notices.show('no_active_editor')
       return
@@ -207,6 +207,20 @@ export class UploadService {
         this.handleFailedUpload(pasteId, ' upload cancelled ')
         return markdownImage
       }
+      // Pasted/dropped images exist nowhere else; keep them in the vault rather than losing them.
+      if (saveLocallyOnFailure) {
+        const localLink = await this.saveAsLocalAttachment(file).catch((saveErr) => {
+          this.plugin.log.error('Local fallback save failed', saveErr)
+          return null
+        })
+        if (localLink) {
+          this.plugin.log.warn('Eagle upload failed, saved locally', { err: e instanceof Error ? e.message : String(e) })
+          modal.close()
+          this.embedMarkDownImage(pasteId, localLink)
+          this.plugin.notices.show('saved_locally')
+          return markdownImage
+        }
+      }
       if (e instanceof EagleApiError) {
         this.plugin.log.error('Eagle upload failed', e)
         modal.showError(`Upload failed: ${e.message}`)
@@ -222,6 +236,14 @@ export class UploadService {
     modal.close()
     this.embedMarkDownImage(pasteId, markdownImage)
     return markdownImage
+  }
+
+  private async saveAsLocalAttachment(file: File): Promise<string> {
+    const { fileManager, vault, workspace } = this.plugin.app
+    const sourcePath = workspace.getActiveFile()?.path ?? ''
+    const path = await fileManager.getAvailablePathForAttachment(file.name || 'Pasted image.png', sourcePath)
+    const saved = await vault.createBinary(path, await file.arrayBuffer())
+    return `!${fileManager.generateMarkdownLink(saved, sourcePath)}`
   }
 
   private insertTemporaryText(pasteId: string, atPos?: EditorPosition) {
