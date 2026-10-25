@@ -4,7 +4,7 @@ import { SerializedDataFile } from '../src/utils/serialized-data-file'
 
 function slowHost() {
   let disk: Record<string, unknown> = {}
-  const tick = () => new Promise((r) => setTimeout(r, 5))
+  const tick = () => new Promise<void>((r) => queueMicrotask(r))
   return {
     host: {
       loadData: async () => { const snapshot = { ...disk }; await tick(); return snapshot },
