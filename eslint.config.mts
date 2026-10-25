@@ -98,6 +98,8 @@ export default tseslint.config(
 			'import/no-nodejs-modules': 'off',
 			'no-console': 'off',
 			'obsidianmd/rule-custom-message': 'off',
+			// Node has no `window`; the autofix would break these scripts.
+			'obsidianmd/prefer-window-timers': 'off',
 		},
 	},
 	// Test files: relax rules that don't apply to test code.
