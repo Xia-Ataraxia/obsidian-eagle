@@ -14,7 +14,6 @@ Eagle Plugin for Obsidian — uploads images to Eagle instead of storing them lo
 | `pnpm test` | Vitest run |
 | `pnpm test:ui` | Vitest with UI |
 | `pnpm verify` | Build, reload plugin in vault, run verify script |
-| `pnpm e2e` | WebdriverIO end-to-end tests |
 | `pnpm lint` | ESLint check |
 | `pnpm lint:fix` | ESLint auto-fix |
 | `pnpm release:patch` | run CI, patch bump, auto-push tag |
