@@ -43,6 +43,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   private originalCacheFolderName: string
   private previewDescEl: HTMLElement | null = null
   private statusBadge: HTMLElement | null = null
+  private connected: boolean | null = null
   private foldersPromise: Promise<EagleFolderList> | null = null
 
   constructor(app: App, plugin: EaglePlugin) {
@@ -135,6 +136,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
 
   private renderConnectionTest(setting: Setting): void {
     this.statusBadge = setting.controlEl.createSpan({ cls: 'eagle-connection-status', text: '○ checking…' })
+    if (this.connected !== null) this.updateConnectionBadge(this.connected)
     void this.eagleFolders()
     setting.addButton((btn) => {
       btn.setButtonText('Test connection').onClick(async () => {
@@ -291,6 +293,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   }
 
   private updateConnectionBadge(connected: boolean): void {
+    this.connected = connected
     const badge = this.statusBadge
     if (!badge) return
     badge.removeClass('is-connected', 'is-disconnected')
@@ -355,6 +358,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   override hide() {
     this.foldersPromise = null
     this.statusBadge = null
+    this.connected = null
 
     const before = this.plugin.settings.folderMappings.length
     this.plugin.settings.folderMappings = sanitizeFolderMappings(
