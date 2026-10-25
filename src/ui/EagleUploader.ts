@@ -6,30 +6,19 @@ import type { NodeDataAdapter, NodeErrnoException } from '../types/obsidian'
 
 import EagleApiError from '../domain/EagleApiError'
 import { EaglePluginSettings } from '../domain/settings'
+import { type EagleFolderTreeNode, extractResponseMessage, extractSearchItemsData, extractTextMessage, extractThumbnailCandidate, flattenFolderTree, normalizeRequestError, parseCreateFolderResponse, parseFolderList, parseFolderListResponse, parseItemInfoResponse, parseLibraryInfoResponse, parseSearchItemsResponse, parseStringDataResponse } from '../utils/eagle-response-parsers'
 import { PluginLogger } from '../utils/plugin-logger'
 import { safeDisplayName, safeImageExtension } from '../utils/eagle-path-contract'
 import { extractFileExtension } from '../utils/image-format'
 import { generatePseudoRandomId } from '../utils/pseudo-random'
-import {
-  EagleAddFromPathRequest,
-  EagleApiStringDataResponse,
-  EagleCreateFolderRequest,
-  EagleCreateFolderResponse,
-  EagleFolderListNodePayload,
-  EagleFolderListResponse,
-  EagleItemInfoResponse,
-  EagleLibraryInfoResponse,
-  EagleRawItemCandidate,
-  EagleSearchItemsPayload,
-  EagleSearchItemsResponse,
-} from './eagle-api-payloads'
+import type { EagleAddFromPathRequest, EagleCreateFolderRequest } from '../types/eagle-api-payloads'
 import type {
   EagleFolderWithPath,
   EagleItemSearchOptions,
   EagleItemSearchResult,
   EagleUploadOptions,
   EagleUploadResult,
-} from './eagle-uploader-types'
+} from '../types/eagle-uploader-types'
 import { normalizeEagleApiPathToFileUrl, resolveEagleThumbnailUrl } from './file-url'
 
 export type {
@@ -39,7 +28,7 @@ export type {
   EagleSearchPickerUploader,
   EagleUploadOptions,
   EagleUploadResult,
-} from './eagle-uploader-types'
+} from '../types/eagle-uploader-types'
 
 const EAGLE_API_ENDPOINTS = {
   ADD_FROM_PATH: '/api/item/addFromPath',
@@ -55,12 +44,6 @@ const EAGLE_PROCESSING_DELAY_MS = 300
 const EAGLE_URL_PROTOCOL = 'eagle://item/'
 const CONNECTION_ERROR_HINT =
   'Cannot connect to Eagle. Make sure Eagle is running and API host/port are correct.'
-
-interface EagleFolderTreeNode {
-  id: string
-  name: string
-  children?: EagleFolderTreeNode[]
-}
 
 export default class EagleUploader {
   private readonly log = new PluginLogger('Eagle')
@@ -95,8 +78,8 @@ export default class EagleUploader {
       if (signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError')
 
       if (resp.status < 200 || resp.status >= 300) {
-        const responseMessage = this.extractResponseMessage(resp.json)
-          || this.extractTextMessage(resp)
+        const responseMessage = extractResponseMessage(resp.json)
+          || extractTextMessage(resp)
           || `${resp.status} Unknown Error`
         throw new EagleApiError(responseMessage)
       }
@@ -110,223 +93,9 @@ export default class EagleUploader {
         throw error
       }
 
-      const message = this.normalizeRequestError(error)
+      const message = normalizeRequestError(error)
       throw new EagleApiError(`${CONNECTION_ERROR_HINT} ${message}`)
     }
-  }
-
-  private extractTextMessage(resp: { text?: unknown }): string {
-    if (typeof resp.text === 'string' && resp.text.trim()) {
-      return resp.text.trim()
-    }
-    return ''
-  }
-
-  private extractResponseMessage(payload: unknown): string {
-    if (!payload || typeof payload !== 'object') return ''
-    if ('message' in payload && typeof payload.message === 'string' && payload.message.trim()) {
-      return payload.message.trim()
-    }
-    return ''
-  }
-
-  private isObjectRecord(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object'
-  }
-
-  private parseStringDataResponse(payload: unknown): EagleApiStringDataResponse {
-    if (!this.isObjectRecord(payload)) {
-      return {}
-    }
-
-    const status = payload['status']
-    const message = payload['message']
-    const data = payload['data']
-
-    return {
-      status: typeof status === 'string' ? status : undefined,
-      message: typeof message === 'string' ? message : undefined,
-      data: typeof data === 'string' ? data : undefined,
-    }
-  }
-
-  private parseItemInfoResponse(payload: unknown): EagleItemInfoResponse {
-    if (!this.isObjectRecord(payload)) {
-      return { status: 'error' }
-    }
-
-    const rawData = payload['data']
-    const data = this.isObjectRecord(rawData)
-      ? {
-          name: typeof rawData['name'] === 'string' ? rawData['name'] : undefined,
-          ext: typeof rawData['ext'] === 'string' ? rawData['ext'] : undefined,
-          isDeleted: typeof rawData['isDeleted'] === 'boolean' ? rawData['isDeleted'] : undefined,
-        }
-      : undefined
-
-    return {
-      status: typeof payload['status'] === 'string' ? payload['status'] : 'error',
-      data,
-    }
-  }
-
-  private parseLibraryInfoResponse(payload: unknown): EagleLibraryInfoResponse {
-    if (!this.isObjectRecord(payload)) {
-      return { status: 'error' }
-    }
-
-    const rawData = payload['data']
-    const library = this.isObjectRecord(rawData) && this.isObjectRecord(rawData['library'])
-      ? {
-          path: typeof rawData['library']['path'] === 'string' ? rawData['library']['path'] : undefined,
-        }
-      : undefined
-
-    return {
-      status: typeof payload['status'] === 'string' ? payload['status'] : 'error',
-      data: library ? { library } : undefined,
-    }
-  }
-
-  private parseCreateFolderResponse(payload: unknown): EagleCreateFolderResponse {
-    if (!this.isObjectRecord(payload)) {
-      return {}
-    }
-
-    const rawData = payload['data']
-
-    return {
-      status: typeof payload['status'] === 'string' ? payload['status'] : undefined,
-      message: typeof payload['message'] === 'string' ? payload['message'] : undefined,
-      data: this.isObjectRecord(rawData) && typeof rawData['id'] === 'string'
-        ? { id: rawData['id'] }
-        : undefined,
-    }
-  }
-
-  private parseFolderListNode(folder: unknown): EagleFolderTreeNode {
-    if (!this.isObjectRecord(folder)) {
-      throw new EagleApiError('Eagle API returned invalid folder list payload')
-    }
-
-    const id = folder['id']
-    const name = folder['name']
-    const children = folder['children']
-
-    if (typeof id !== 'string' || typeof name !== 'string') {
-      throw new EagleApiError('Eagle API returned invalid folder payload')
-    }
-
-    return {
-      id,
-      name,
-      children: Array.isArray(children)
-        ? this.parseFolderList(children)
-        : undefined,
-    }
-  }
-
-  private parseFolderListResponse(payload: unknown): EagleFolderListResponse {
-    if (!this.isObjectRecord(payload)) {
-      return {}
-    }
-
-    const data = payload['data']
-
-    return {
-      status: typeof payload['status'] === 'string' ? payload['status'] : undefined,
-      message: typeof payload['message'] === 'string' ? payload['message'] : undefined,
-      data: Array.isArray(data)
-        ? data.map((node): EagleFolderListNodePayload =>
-            this.isObjectRecord(node)
-              ? {
-                  id: node['id'],
-                  name: node['name'],
-                  children: node['children'],
-                }
-              : {},
-          )
-        : undefined,
-    }
-  }
-
-  private parseSearchItemCandidate(payload: unknown): EagleRawItemCandidate | null {
-    if (!this.isObjectRecord(payload)) {
-      return null
-    }
-
-    const tags = payload['tags']
-
-    return {
-      id: typeof payload['id'] === 'string' ? payload['id'] : undefined,
-      name: typeof payload['name'] === 'string' ? payload['name'] : undefined,
-      ext: typeof payload['ext'] === 'string' ? payload['ext'] : undefined,
-      tags: Array.isArray(tags)
-        ? tags.filter((tag): tag is string => typeof tag === 'string')
-        : typeof tags === 'string'
-          ? tags
-          : undefined,
-      annotation: typeof payload['annotation'] === 'string' ? payload['annotation'] : undefined,
-      isDeleted: typeof payload['isDeleted'] === 'boolean' ? payload['isDeleted'] : undefined,
-      filePath: typeof payload['filePath'] === 'string' ? payload['filePath'] : undefined,
-      thumbnail: typeof payload['thumbnail'] === 'string' ? payload['thumbnail'] : undefined,
-      thumb: typeof payload['thumb'] === 'string' ? payload['thumb'] : undefined,
-      thumbnailPath: typeof payload['thumbnailPath'] === 'string' ? payload['thumbnailPath'] : undefined,
-      preview: typeof payload['preview'] === 'string' ? payload['preview'] : undefined,
-      previewPath: typeof payload['previewPath'] === 'string' ? payload['previewPath'] : undefined,
-    }
-  }
-
-  private parseSearchItemsPayload(payload: unknown): EagleSearchItemsPayload | undefined {
-    if (!this.isObjectRecord(payload)) {
-      return undefined
-    }
-
-    const items = Array.isArray(payload['items'])
-      ? payload['items']
-          .map((item) => this.parseSearchItemCandidate(item))
-          .filter((item): item is EagleRawItemCandidate => item !== null)
-      : undefined
-
-    const data = Array.isArray(payload['data'])
-      ? payload['data']
-          .map((item) => this.parseSearchItemCandidate(item))
-          .filter((item): item is EagleRawItemCandidate => item !== null)
-      : undefined
-
-    return {
-      items,
-      data,
-    }
-  }
-
-  private parseSearchItemsResponse(payload: unknown): EagleSearchItemsResponse {
-    if (!this.isObjectRecord(payload)) {
-      return {}
-    }
-
-    const rawData = payload['data']
-    const data = Array.isArray(rawData)
-      ? rawData
-          .map((item) => this.parseSearchItemCandidate(item))
-          .filter((item): item is EagleRawItemCandidate => item !== null)
-      : this.parseSearchItemsPayload(rawData)
-
-    return {
-      status: typeof payload['status'] === 'string' ? payload['status'] : undefined,
-      message: typeof payload['message'] === 'string' ? payload['message'] : undefined,
-      data,
-    }
-  }
-
-  private normalizeRequestError(error: unknown): string {
-    let rawMessage = ''
-    if (error instanceof Error) {
-      rawMessage = error.message
-    } else if (typeof error === 'string') {
-      rawMessage = error
-    }
-    return rawMessage ? `(${rawMessage})` : ''
   }
 
   async upload(image: File, options?: EagleUploadOptions): Promise<EagleUploadResult> {
@@ -407,7 +176,7 @@ export default class EagleUploader {
       body.folderId = folderId
     }
 
-    const data = this.parseStringDataResponse(await this.requestJson(url, 'POST', JSON.stringify(body), signal))
+    const data = parseStringDataResponse(await this.requestJson(url, 'POST', JSON.stringify(body), signal))
 
     if (data?.status !== 'success') {
       const errorMsg = data?.message || 'Unknown error'
@@ -470,7 +239,7 @@ export default class EagleUploader {
   private async fetchFileUrlForItemId(itemId: string, signal?: AbortSignal): Promise<string> {
     const { eagleHost, eaglePort } = this.settings
     const infoUrl = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.ITEM_INFO}?id=${itemId}`
-    const infoData = this.parseItemInfoResponse(await this.requestJson(infoUrl, 'GET', undefined, signal))
+    const infoData = parseItemInfoResponse(await this.requestJson(infoUrl, 'GET', undefined, signal))
 
     if (infoData?.status !== 'success') {
       this.log.warn('item/info returned non-success', { itemId, status: infoData?.status })
@@ -493,7 +262,7 @@ export default class EagleUploader {
   async getLibraryRootPath(signal?: AbortSignal): Promise<string | null> {
     const { eagleHost, eaglePort } = this.settings
     const url = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.LIBRARY_INFO}`
-    const data = this.parseLibraryInfoResponse(await this.requestJson(url, 'GET', undefined, signal))
+    const data = parseLibraryInfoResponse(await this.requestJson(url, 'GET', undefined, signal))
     return data?.data?.library?.path ?? null
   }
 
@@ -505,7 +274,7 @@ export default class EagleUploader {
     const { eagleHost, eaglePort } = this.settings
     const url = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.THUMBNAIL}?id=${itemId}`
 
-    const data = this.parseStringDataResponse(await this.requestJson(url, 'GET'))
+    const data = parseStringDataResponse(await this.requestJson(url, 'GET'))
 
     if (data?.status === 'success' && typeof data?.data === 'string') {
       return normalizeEagleApiPathToFileUrl(data.data)
@@ -518,29 +287,13 @@ export default class EagleUploader {
     const { eagleHost, eaglePort } = this.settings
     const url = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.FOLDER_LIST}`
 
-    const data = this.parseFolderListResponse(await this.requestJson(url, 'GET', undefined, signal))
+    const data = parseFolderListResponse(await this.requestJson(url, 'GET', undefined, signal))
 
     if (data?.status === 'success' && Array.isArray(data?.data)) {
-      return this.parseFolderList(data.data)
+      return parseFolderList(data.data)
     }
 
     throw new EagleApiError('Failed to list folders')
-  }
-
-  private parseFolderList(raw: ReadonlyArray<unknown>): EagleFolderTreeNode[] {
-    return raw.map((folder) => this.parseFolderListNode(folder))
-  }
-
-  private flattenFolderTree(folders: EagleFolderTreeNode[], parentPath = ''): EagleFolderWithPath[] {
-    const result: EagleFolderWithPath[] = []
-    for (const folder of folders) {
-      const path = parentPath ? `${parentPath}/${folder.name}` : folder.name
-      result.push({ id: folder.id, name: folder.name, path })
-      if (folder.children?.length) {
-        result.push(...this.flattenFolderTree(folder.children, path))
-      }
-    }
-    return result
   }
 
   async createFolder(name: string, signal?: AbortSignal, parentId?: string): Promise<string> {
@@ -550,7 +303,7 @@ export default class EagleUploader {
     const body: EagleCreateFolderRequest = { folderName: name }
     if (parentId) body.parent = parentId
 
-    const data = this.parseCreateFolderResponse(await this.requestJson(url, 'POST', JSON.stringify(body), signal))
+    const data = parseCreateFolderResponse(await this.requestJson(url, 'POST', JSON.stringify(body), signal))
 
     if (data?.status === 'success' && typeof data.data?.id === 'string') {
       return data.data.id
@@ -581,7 +334,7 @@ export default class EagleUploader {
 
   private async resolveFolderId(name: string, signal?: AbortSignal): Promise<string> {
     const rawFolders = await this.listFoldersRaw(signal)
-    const flat = this.flattenFolderTree(rawFolders)
+    const flat = flattenFolderTree(rawFolders)
 
     // Match strategy:
     // 1. Full path — slash-separated input like "Resources/Obsidian" maps to a truly nested folder.
@@ -629,7 +382,7 @@ export default class EagleUploader {
 
   async listFolders(): Promise<EagleFolderWithPath[]> {
     const rawFolders = await this.listFoldersRaw()
-    return this.flattenFolderTree(rawFolders)
+    return flattenFolderTree(rawFolders)
   }
 
   async isConnected(): Promise<boolean> {
@@ -637,7 +390,7 @@ export default class EagleUploader {
       await this.getLibraryRootPath()
       return true
     } catch (err) {
-      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- String() is intentional fallback for unknown catch value
+       
       this.log.debug('isConnected check failed', { err: String(err) })
       return false
     }
@@ -651,7 +404,7 @@ export default class EagleUploader {
     try {
       const { eagleHost, eaglePort } = this.settings
       const url = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.ITEM_INFO}?id=${itemId}`
-      const data = this.parseItemInfoResponse(await this.requestJson(url, 'GET'))
+      const data = parseItemInfoResponse(await this.requestJson(url, 'GET'))
       return (data.status === 'success' && data.data?.name) ? data.data.name : null
     } catch {
       return null
@@ -667,58 +420,13 @@ export default class EagleUploader {
     try {
       const { eagleHost, eaglePort } = this.settings
       const url = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.ITEM_INFO}?id=${itemId}`
-      const data = this.parseItemInfoResponse(await this.requestJson(url, 'GET'))
+      const data = parseItemInfoResponse(await this.requestJson(url, 'GET'))
       return data.status === 'success' && !data.data?.isDeleted
     } catch (err) {
-      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- String() is intentional fallback for unknown catch value
+       
       this.log.debug('itemExists check failed — treating as uncertain', { itemId, err: String(err) })
       return null
     }
-  }
-
-  private firstNonEmptyStringValue(
-    candidate: EagleRawItemCandidate,
-    keys: ReadonlyArray<keyof EagleRawItemCandidate>,
-  ): string | undefined {
-    for (const key of keys) {
-      const value = candidate[key]
-      if (typeof value === 'string' && value.trim()) {
-        return value
-      }
-    }
-    return undefined
-  }
-
-  private extractThumbnailCandidate(candidate: EagleRawItemCandidate): string | undefined {
-    return this.firstNonEmptyStringValue(candidate, [
-      'thumbnail',
-      'thumb',
-      'thumbnailPath',
-      'preview',
-      'previewPath',
-    ])
-  }
-
-  private isSearchItemsPayload(value: unknown): value is EagleSearchItemsPayload {
-    return this.isObjectRecord(value)
-  }
-
-  private extractSearchItemsData(data: EagleSearchItemsResponse['data']): EagleRawItemCandidate[] {
-    if (Array.isArray(data)) {
-      return data
-    }
-
-    if (this.isSearchItemsPayload(data)) {
-      if (Array.isArray(data.items)) {
-        return data.items
-      }
-
-      if (Array.isArray(data.data)) {
-        return data.data
-      }
-    }
-
-    return []
   }
 
   async searchItems({
@@ -744,13 +452,13 @@ export default class EagleUploader {
     const { eagleHost, eaglePort } = this.settings
     const url = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.ITEM_LIST}?${params.toString()}`
 
-    const data = this.parseSearchItemsResponse(await this.requestJson(url, 'GET'))
+    const data = parseSearchItemsResponse(await this.requestJson(url, 'GET'))
     if (data?.status !== 'success') {
       const errorMsg = data?.message || 'Failed to search Eagle items'
       throw new EagleApiError(errorMsg)
     }
 
-    const rawItems = this.extractSearchItemsData(data.data)
+    const rawItems = extractSearchItemsData(data.data)
 
     return rawItems
       .map((candidate) => {
@@ -773,7 +481,7 @@ export default class EagleUploader {
           annotation: candidate.annotation,
           isDeleted: candidate.isDeleted,
           filePath: candidate.filePath,
-          thumbnail: this.extractThumbnailCandidate(candidate),
+          thumbnail: extractThumbnailCandidate(candidate),
         }
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)

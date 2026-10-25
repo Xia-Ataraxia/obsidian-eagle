@@ -103,7 +103,7 @@ function detectBySignature(bytes: Uint8Array): { extension: string; mimeType: st
 }
 
 function normalizeMimeType(mimeType: string) {
-  return (mimeType || '').trim().toLowerCase().split(';')[0]
+  return (mimeType || '').trim().toLowerCase().split(';')[0] ?? ''
 }
 
 function detectByMimeType(mimeType: string) {

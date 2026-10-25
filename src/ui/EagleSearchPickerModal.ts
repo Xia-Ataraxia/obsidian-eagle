@@ -2,7 +2,7 @@ import { App, ButtonComponent, Modal, TextComponent } from 'obsidian'
 
 import EagleApiError from '../domain/EagleApiError'
 import { PluginLogger } from '../utils/plugin-logger'
-import type { EagleItemSearchResult, EagleSearchPickerUploader } from './eagle-uploader-types'
+import type { EagleItemSearchResult, EagleSearchPickerUploader } from '../types/eagle-uploader-types'
 import { fileUrlToDisplayUrl } from './file-url'
 
 const SEARCH_RESULT_LIMIT = 100
@@ -17,9 +17,9 @@ export default class EagleSearchPickerModal extends Modal {
   private readonly debugSearchDiagnostics: boolean
   private readonly debounceMs: number
 
-  private keywordInput: TextComponent
-  private statusEl: HTMLElement
-  private gridEl: HTMLElement
+  private declare keywordInput: TextComponent
+  private declare statusEl: HTMLElement
+  private declare gridEl: HTMLElement
   private results: EagleItemSearchResult[] = []
   private readonly thumbFallbackMap = new Map<string, { wrapper: HTMLElement; ext?: string }>()
   private activeSearchToken = 0
@@ -173,7 +173,7 @@ export default class EagleSearchPickerModal extends Modal {
         return
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- String() is intentional fallback for unknown catch value
+       
       const message = error instanceof Error ? error.message : String(error)
       this.debugLog('search:error', { token, keyword, message })
       if (!(error instanceof EagleApiError)) {
@@ -405,7 +405,7 @@ export default class EagleSearchPickerModal extends Modal {
                 urlType: this.inferThumbnailUrlType('', thumbnailUrl),
               })
             } catch (error) {
-              // eslint-disable-next-line @typescript-eslint/no-base-to-string -- String() is intentional fallback for unknown catch value
+               
               const message = error instanceof Error ? error.message : String(error)
               this.debugLog('thumbnail:fallback:error', { token, itemId: item.id, message })
               if (!(error instanceof EagleApiError)) {

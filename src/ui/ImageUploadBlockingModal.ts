@@ -3,7 +3,7 @@ import { ButtonComponent, Modal } from 'obsidian'
 export default class ImageUploadBlockingModal extends Modal {
   isOpen = false
   onCancel?: () => void
-  private buttonsDiv: HTMLElement
+  private declare buttonsDiv: HTMLElement
 
   override onOpen(): void {
     this.titleEl.setText('Eagle plugin')

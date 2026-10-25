@@ -117,7 +117,7 @@ export function findMarkdownImageTokens(markdown: string): MarkdownImageToken[] 
     if (altEnd === -1) continue
 
     let p = altEnd + 1
-    while (p < markdown.length && /\s/.test(markdown[p])) p += 1
+    while (p < markdown.length && /\s/.test(markdown.charAt(p))) p += 1
     if (markdown[p] !== '(') continue
 
     const parenOpen = p
@@ -165,6 +165,7 @@ export function findEagleWikilinkTokens(markdown: string, cacheFolder: string): 
     if (isOffsetInRanges(match.index, codeRanges)) continue
     const stem = match[1]
     const ext = match[2]
+    if (stem === undefined || ext === undefined) continue
     // If the stem contains `_`, the last segment is the itemId and everything
     // before it is the displayName. Otherwise the whole stem is the itemId.
     const underscoreIdx = stem.lastIndexOf('_')
