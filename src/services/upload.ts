@@ -210,7 +210,7 @@ export class UploadService {
           return null
         })
         if (localLink) {
-          this.plugin.log.warn('Eagle upload failed, saved locally', { err: e instanceof Error ? e.message : String(e) })
+          this.plugin.log.warn('Eagle upload failed, saved locally', { err: e instanceof EagleUnreachableError ? e.detail : e instanceof Error ? e.message : String(e) })
           modal.close()
           this.embedMarkDownImage(pasteId, localLink)
           this.plugin.notices.show('saved_locally')
