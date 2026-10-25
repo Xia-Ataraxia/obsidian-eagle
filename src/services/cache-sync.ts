@@ -90,17 +90,22 @@ export class CacheSyncService {
     )
   }
 
-  /** Startup pass: one vault read serves both the legacy-name check and the cache sync. */
+  /** Startup pass: the legacy-name migration is attempted once per vault; afterwards only the cache sync runs. */
   async startupSync(): Promise<void> {
+    if (this.plugin.settings.legacyCacheNamesMigrated) return this.lazySyncEagleCache()
+
     const contents = await this.readAllMarkdown()
     const cacheFolder = this.plugin.cacheManager.cacheFolder
     const hasLegacyNames = contents.some((c) => findEagleWikilinkTokens(c, cacheFolder).some((t) => t.displayName === undefined))
-    if (!hasLegacyNames) return this.lazySyncEagleCache(contents)
+    if (hasLegacyNames) {
+      await this.migrateCacheFilesToReadableNames().catch((err) => {
+        this.plugin.log.error('cache filename migration failed', err)
+      })
+    }
+    this.plugin.settings.legacyCacheNamesMigrated = true
+    await this.plugin.saveSettings()
     // Migration rewrites links, so the sync must re-read afterwards.
-    await this.migrateCacheFilesToReadableNames().catch((err) => {
-      this.plugin.log.error('cache filename migration failed', err)
-    })
-    return this.lazySyncEagleCache()
+    return hasLegacyNames ? this.lazySyncEagleCache() : this.lazySyncEagleCache(contents)
   }
 
   private readAllMarkdown(): Promise<string[]> {

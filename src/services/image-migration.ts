@@ -89,6 +89,12 @@ export class ImageMigrationService {
       )
     }
 
+    if (migratedCount > 0) {
+      // Migrated links carry no display name yet; let the next startup rename them.
+      this.plugin.settings.legacyCacheNamesMigrated = false
+      await this.plugin.saveSettings()
+    }
+
     let failureSuffix = ''
     if (failedIds.size > 0) {
       const sample = Array.from(failedIds).slice(0, 3).join(', ')
