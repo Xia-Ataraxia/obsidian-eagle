@@ -3,6 +3,7 @@ import {
   MarkdownFileInfo,
   MarkdownView,
   Menu,
+  Notice,
   Plugin,
   TFile,
 } from 'obsidian'
@@ -137,11 +138,16 @@ export default class EaglePlugin extends Plugin {
   }
 
   override onload() {
-    void this.initPlugin()
+    void this.initPlugin().catch((err: unknown) => {
+      this.log.error('plugin failed to initialize', err)
+      new Notice("Eagle couldn't finish starting. Check the developer console for details.")
+    })
   }
 
   override onunload() {
-    this.notices.unload()
+    // initPlugin awaits loadData first, so unload can run before notices exist.
+    const notices: PluginNotices | undefined = this.notices
+    notices?.unload()
     this.syncDebounce.dispose()
   }
 
@@ -303,8 +309,8 @@ export default class EaglePlugin extends Plugin {
       const ext = item.ext || extractFileExtension(fileUrl) || 'jpg'
       const displayName = item.name || undefined
       if (fileUrl.startsWith('file://')) {
-        await this._cacheManager.cacheFromOsPath(item.id, ext, fileUrlToOsPath(fileUrl), displayName).catch((e) => {
-          this.log.warn('cache write failed — image may appear broken', {})
+        await this._cacheManager.cacheFromOsPath(item.id, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
+          this.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
         })
       }
       const markdownImage = this.uploads.markdownImageFor(item.id, ext, displayName)
