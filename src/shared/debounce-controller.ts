@@ -6,7 +6,7 @@ export interface DebounceControllerOptions {
 }
 
 export class DebounceController {
-	private timer: ReturnType<typeof setTimeout> | null = null;
+	private timer: number | null = null;
 	private running = false;
 	private rerun = false;
 
@@ -18,9 +18,9 @@ export class DebounceController {
 			return;
 		}
 		if (this.timer) {
-			clearTimeout(this.timer);
+			window.clearTimeout(this.timer);
 		}
-		this.timer = setTimeout(() => {
+		this.timer = window.setTimeout(() => {
 			this.timer = null;
 			void this.run();
 		}, this.options.delayMs);
@@ -28,7 +28,7 @@ export class DebounceController {
 
 	dispose(): void {
 		if (this.timer) {
-			clearTimeout(this.timer);
+			window.clearTimeout(this.timer);
 			this.timer = null;
 		}
 	}

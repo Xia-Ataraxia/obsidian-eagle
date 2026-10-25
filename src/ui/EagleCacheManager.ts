@@ -91,7 +91,7 @@ export default class EagleCacheManager {
           reject(err instanceof Error ? err : new Error(String(err)))
           return
         }
-        resolve(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength))
+        resolve(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer)
       })
     })
     await this.app.vault.adapter.writeBinary(this.cachedVaultPath(itemId, ext, displayName), data)

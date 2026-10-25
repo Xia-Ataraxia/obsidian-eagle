@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
     "target": "ES6",
     "allowJs": true,
+    "strict": false,
+    "types": ["node"],
     "noImplicitAny": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
@@ -18,5 +19,5 @@
     "useUnknownInCatchVariables": true
   },
   "include": ["**/*.ts"],
-  "exclude": ["test/e2e/**", "vitest.config.ts"]
+  "exclude": ["vitest.config.ts"]
 }

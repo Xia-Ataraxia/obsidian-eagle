@@ -73,11 +73,7 @@ interface OldFormatMatch {
 
 export default class EaglePlugin extends Plugin {
   private readonly log = new PluginLogger('Eagle')
-  _settings: EaglePluginSettings
-
-  get settings(): EaglePluginSettings {
-    return this._settings
-  }
+  declare settings: EaglePluginSettings
 
   notices: PluginNotices
 
@@ -228,20 +224,20 @@ export default class EaglePlugin extends Plugin {
   }
 
   private async loadSettings() {
-    this._settings = {
+    this.settings = {
       ...DEFAULT_SETTINGS,
       ...((await this.loadData()) as EaglePluginSettings),
     }
 
-    this._settings.folderMappings = sanitizeFolderMappings(this._settings.folderMappings ?? [])
-    this._settings.cacheFolderName = safeCacheFolderPath(this._settings.cacheFolderName)
+    this.settings.folderMappings = sanitizeFolderMappings(this.settings.folderMappings ?? [])
+    this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
   }
 
   async saveSettings(): Promise<void> {
-    this._settings.folderMappings = sanitizeFolderMappings(this._settings.folderMappings ?? [])
-    this._settings.cacheFolderName = safeCacheFolderPath(this._settings.cacheFolderName)
+    this.settings.folderMappings = sanitizeFolderMappings(this.settings.folderMappings ?? [])
+    this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
     const existing = ((await this.loadData()) as Record<string, unknown>) ?? {}
-    await this.saveData({ ...existing, ...this._settings })
+    await this.saveData({ ...existing, ...this.settings })
   }
 
   override onload() {
@@ -259,7 +255,7 @@ export default class EaglePlugin extends Plugin {
     this.addSettingTab(new EaglePluginSettingsTab(this.app, this))
 
     this.setupEagleUploader()
-    this._cacheManager = new EagleCacheManager(this.app, this._settings.cacheFolderName)
+    this._cacheManager = new EagleCacheManager(this.app, this.settings.cacheFolderName)
     this._hashStore = new EagleHashStore()
     await this._hashStore.load(this)
     await this.migrateCacheFilesToReadableNames().catch((err) => {
@@ -276,7 +272,7 @@ export default class EaglePlugin extends Plugin {
   }
 
   setupEagleUploader(): void {
-    this._eagleUploader = new EagleUploader(this.app, this._settings)
+    this._eagleUploader = new EagleUploader(this.app, this.settings)
   }
 
   private setupEagleHandlers() {
@@ -334,7 +330,7 @@ export default class EaglePlugin extends Plugin {
   }
 
   private async migrateAllImages(): Promise<void> {
-    const cacheFolderName = this._settings.cacheFolderName
+    const cacheFolderName = this.settings.cacheFolderName
 
     // Phase 1: Scan all files for old-format tokens in parallel
     const oldFormatByFile = new Map<string, { file: TFile; content: string; candidates: OldFormatMatch[] }>()
@@ -671,8 +667,8 @@ export default class EaglePlugin extends Plugin {
       (item) => {
         void this.insertSelectedSearchItem(editor, item)
       },
-      this._settings.debugSearchDiagnostics,
-      this._settings.searchDebounceMs,
+      this.settings.debugSearchDiagnostics,
+      this.settings.searchDebounceMs,
     ).open()
   }
 
@@ -719,13 +715,13 @@ export default class EaglePlugin extends Plugin {
       const normalizedFile = await normalizeImageForUpload(file)
       const originalName = file.name.replace(/\.[^.]+$/, '')
       const noteName = this.app.workspace.getActiveFile()?.basename ?? ''
-      const displayName = resolveItemName(this._settings.uploadItemNameTemplate, { originalName, noteName })
+      const displayName = resolveItemName(this.settings.uploadItemNameTemplate, { originalName, noteName })
 
       // Deduplication: compute hash and library path once, reuse for lookup + storage
       let dedupHash: string | null = null
       let dedupLibraryPath: string | null = null
 
-      if (this._settings.deduplicateUploads) {
+      if (this.settings.deduplicateUploads) {
         const buffer = await normalizedFile.arrayBuffer()
         dedupHash = await EagleHashStore.computeHash(buffer)
         dedupLibraryPath = await this._eagleUploader.getLibraryRootPath(controller.signal) ?? null
@@ -886,12 +882,12 @@ export default class EaglePlugin extends Plugin {
 
   resolveTargetEagleFolderForActiveFile(): string | undefined {
     const activeFilePath = this.app.workspace.getActiveFile()?.path ?? null
-    const mappedFolderName = resolveMappedEagleFolder(activeFilePath, this._settings.folderMappings)
+    const mappedFolderName = resolveMappedEagleFolder(activeFilePath, this.settings.folderMappings)
     if (mappedFolderName) {
       return mappedFolderName
     }
 
-    const fallbackFolderName = this._settings.eagleFolderName.trim()
+    const fallbackFolderName = this.settings.eagleFolderName.trim()
     return fallbackFolderName || undefined
   }
 }

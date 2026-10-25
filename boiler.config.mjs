@@ -16,6 +16,9 @@ export default {
   version: {
     stageFiles: ['manifest.json', 'versions.json'],
   },
+  sync: {
+    skipDestinations: [['eslint.config.mts']],
+  },
   ci: {
     pushBranches: ['**'],
     testResultsFile: 'test-results.xml',
