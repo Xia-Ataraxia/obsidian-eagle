@@ -6,6 +6,7 @@ import {
   PluginSettingTab,
   Setting,
   SettingDefinitionItem,
+  SettingGroupItem,
   TextComponent,
   TFolder,
 } from 'obsidian'
@@ -123,6 +124,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
           { name: 'Search debounce delay', desc: 'How long to wait after typing before triggering a search (ms).', control: { type: 'slider', key: 'searchDebounceMs', min: 100, max: 1000, step: 50 } },
         ],
       },
+      this.mutedNoticesGroup(),
       {
         type: 'group',
         heading: 'Debug',
@@ -131,6 +133,32 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
         ],
       },
     ]
+  }
+
+  private mutedNoticesGroup(): SettingDefinitionItem {
+    const { notices } = this.plugin
+    const muted = notices.listMuted()
+    const unmute = async (ids: string[]) => {
+      for (const id of ids) await notices.unmute(id)
+      this.update()
+    }
+    const items: SettingGroupItem[] = muted.length
+      ? muted.map((id) => ({
+          name: this.plugin.noticeLabel(id),
+          render: (setting: Setting) => {
+            setting.addButton((btn) => btn.setButtonText('Unmute').onClick(() => unmute([id])))
+          },
+        }))
+      : [{ name: 'No notices are muted', desc: 'Notices you silence with the bell button appear here.' }]
+    if (muted.length > 1) {
+      items.push({
+        name: 'Unmute all',
+        render: (setting: Setting) => {
+          setting.addButton((btn) => btn.setButtonText('Unmute all').onClick(() => unmute(muted)))
+        },
+      })
+    }
+    return { type: 'group', heading: 'Muted notices', items }
   }
 
   private renderConnectionTest(setting: Setting): void {

@@ -132,6 +132,11 @@ export default class EaglePlugin extends Plugin {
     this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
   }
 
+  noticeLabel(id: string): string {
+    const template = EAGLE_NOTICE_CATALOG[id]?.template ?? id
+    return template.replace(/{{\s*[\w.-]+\s*}}/g, '…')
+  }
+
   async saveSettings(): Promise<void> {
     this.settings.folderMappings = sanitizeFolderMappings(this.settings.folderMappings ?? [])
     this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
