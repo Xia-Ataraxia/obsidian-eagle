@@ -14,6 +14,8 @@ export interface EaglePluginSettings {
   deduplicateUploads: boolean
   searchDebounceMs: number
   uploadItemNameTemplate: string
+  /** Set once the legacy `{itemId}.{ext}` filename migration was attempted, so startup stops rescanning the vault for it. */
+  legacyCacheNamesMigrated: boolean
   plugin_notices?: { muted: Record<string, boolean> }
 }
 
@@ -30,6 +32,7 @@ export const DEFAULT_SETTINGS: EaglePluginSettings = {
   deduplicateUploads: true,
   searchDebounceMs: 300,
   uploadItemNameTemplate: '{uuid}_{noteName}',
+  legacyCacheNamesMigrated: false,
 }
 
 export function settingsFromSavedData(raw: unknown): EaglePluginSettings {
