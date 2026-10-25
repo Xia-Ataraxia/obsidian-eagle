@@ -141,6 +141,8 @@ export interface WikilinkEmbedToken {
   itemId: string
   displayName: string | undefined
   ext: string
+  /** Raw `|alias` suffix (e.g. `|300`), preserved when links are rewritten. */
+  alias: string
   start: number
   end: number
 }
@@ -158,8 +160,9 @@ export function findEagleWikilinkTokens(markdown: string, cacheFolder: string): 
   const tokens: WikilinkEmbedToken[] = []
   const codeRanges = fencedCodeBlockRanges(markdown)
   const escapedFolder = cacheFolder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  // Capture the full stem (everything before the last dot) and the extension.
-  const pattern = new RegExp(`!\\[\\[${escapedFolder}\\/([^.\\]]+)\\.([^\\]]+)\\]\\]`, 'g')
+  // Greedy stem so display names containing dots ("Screenshot ... 10.30.00") keep
+  // everything up to the extension; an optional `|alias` is captured separately.
+  const pattern = new RegExp(`!\\[\\[${escapedFolder}\\/([^\\]|]+)\\.([A-Za-z0-9]+)(\\|[^\\]]*)?\\]\\]`, 'g')
 
   for (const match of markdown.matchAll(pattern)) {
     if (isOffsetInRanges(match.index, codeRanges)) continue
@@ -175,6 +178,7 @@ export function findEagleWikilinkTokens(markdown: string, cacheFolder: string): 
       itemId,
       displayName,
       ext,
+      alias: match[3] ?? '',
       start: match.index,
       end: match.index + match[0].length,
     })

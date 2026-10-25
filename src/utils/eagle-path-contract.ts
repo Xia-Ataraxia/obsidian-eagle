@@ -117,9 +117,9 @@ export function cachePathFor(cacheFolder: string, itemId: string, ext: string, d
   return `${safeCacheFolderPath(cacheFolder)}/${cacheFileNameFor(itemId, ext, displayName)}`
 }
 
-export function wikilinkForCacheItem(cacheFolder: string, itemId: string, ext: string, displayName?: string): string {
+export function wikilinkForCacheItem(cacheFolder: string, itemId: string, ext: string, displayName?: string, alias = ''): string {
   const linkText = displayName === undefined ? undefined : safeWikilinkText(displayName)
-  return `![[${cachePathFor(cacheFolder, itemId, ext, linkText)}]]`
+  return `![[${cachePathFor(cacheFolder, itemId, ext, linkText)}${alias}]]`
 }
 
 export function dedupePathSegments(segments: string[]): string[] {
