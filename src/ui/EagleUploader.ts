@@ -45,7 +45,7 @@ const EAGLE_PROCESSING_DELAY_MS = 300
 const EAGLE_URL_PROTOCOL = 'eagle://item/'
 
 export default class EagleUploader {
-  private readonly log = new PluginLogger('Eagle')
+  private readonly log = new PluginLogger('Eagle', () => this.settings.debugSearchDiagnostics)
   private readonly app: App
   private readonly settings: EaglePluginSettings
   private folderIdCache: Map<string, string> = new Map<string, string>()

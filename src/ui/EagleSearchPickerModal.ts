@@ -13,7 +13,7 @@ const THUMBNAIL_CONCURRENCY = 6
 type PickerStatus = 'idle' | 'loading' | 'error' | 'info'
 
 export default class EagleSearchPickerModal extends Modal {
-  private readonly log = new PluginLogger('Eagle')
+  private readonly log = new PluginLogger('Eagle', () => this.debugSearchDiagnostics)
   private readonly uploader: EagleSearchPickerUploader
   private readonly onChoose: (item: EagleItemSearchResult) => void
   private readonly debugSearchDiagnostics: boolean
@@ -90,10 +90,6 @@ export default class EagleSearchPickerModal extends Modal {
   }
 
   private debugLog(message: string, data?: Record<string, unknown>): void {
-    if (!this.debugSearchDiagnostics) {
-      return
-    }
-
     this.log.debug(message, data)
   }
 

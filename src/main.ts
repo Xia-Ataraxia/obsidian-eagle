@@ -55,7 +55,7 @@ interface CanvasView {
 }
 
 export default class EaglePlugin extends Plugin {
-  readonly log = new PluginLogger('Eagle')
+  readonly log = new PluginLogger('Eagle', () => this.settings.debugSearchDiagnostics)
   declare settings: EaglePluginSettings
 
   declare notices: PluginNotices
