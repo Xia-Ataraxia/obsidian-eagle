@@ -288,6 +288,7 @@ export default class EagleSearchPickerModal extends Modal {
         cls: 'eagle-picker-img',
         attr: { src: fileUrlToDisplayUrl(resolvedUrl), loading: 'lazy', alt: item.name || item.id },
       })
+      img.addEventListener('load', () => img.addClass('is-loaded'))
       img.addEventListener('error', () => {
         this.debugLog('thumbnail:metadata:error', {
           token,
@@ -392,10 +393,11 @@ export default class EagleSearchPickerModal extends Modal {
 
               const { wrapper: thumbWrapper, ext } = entry
               thumbWrapper.empty()
-              thumbWrapper.createEl('img', {
+              const fallbackImg = thumbWrapper.createEl('img', {
                 cls: 'eagle-picker-img',
                 attr: { src: fileUrlToDisplayUrl(thumbnailUrl), loading: 'lazy', alt: item.name || item.id },
               })
+              fallbackImg.addEventListener('load', () => fallbackImg.addClass('is-loaded'))
               this.appendExtBadge(thumbWrapper, ext)
               this.thumbFallbackMap.delete(item.id)
               this.debugLog('thumbnail:fallback:ok', {
