@@ -194,9 +194,17 @@ export default class EaglePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('editor-menu', this.eaglePluginRightClickHandler))
   }
 
+  private readonly wrappedCanvasViews = new WeakSet<CanvasView>()
+
   private overridePasteHandlerForCanvasView(view: CanvasView) {
+    // active-leaf-change fires on every activation; wrap once or each layer retries the upload.
+    if (this.wrappedCanvasViews.has(view)) return
+    this.wrappedCanvasViews.add(view)
     const originalPasteFn = view.handlePaste
     view.handlePaste = createEagleCanvasPasteHandler(this, originalPasteFn)
+    this.register(() => {
+      view.handlePaste = originalPasteFn
+    })
   }
 
   private addUploadLocalCommand() {
