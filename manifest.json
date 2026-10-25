@@ -2,7 +2,7 @@
 	"id": "eagle",
 	"name": "Eagle Integration",
 	"version": "2.9.11",
-	"minAppVersion": "1.7.2",
+	"minAppVersion": "1.13.0",
 	"description": "Upload images to Eagle and manage them alongside your vault.",
 	"author": "Beomsu Koh",
 	"authorUrl": "https://github.com/GoBeromsu",

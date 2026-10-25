@@ -48,7 +48,8 @@ Your Obsidian vault is for text. Eagle is for images. This plugin bridges them s
 cd <your-vault>/.obsidian/plugins
 git clone https://github.com/Xia-Ataraxia/obsidian-eagle eagle-plugin
 cd eagle-plugin
-pnpm install && pnpm build
+bun install && bun run build
+cp dist/* .
 ```
 
 Restart Obsidian and enable the plugin under **Settings > Community plugins**.
@@ -129,52 +130,25 @@ Versions prior to 2.0 used this format:
 
 Run **Eagle: Migrate all images to eagle-cache** to convert all old-format links to wikilinks. Old-format links continue to render for backward compatibility.
 
-## Architecture
+## Network access
 
-```
-obsidian-eagle-plugin/
-├── src/
-│   ├── main.ts                  # Plugin entry point
-│   ├── Canvas.ts                # Canvas paste handler
-│   ├── domain/settings.ts       # Configuration schema
-│   ├── domain/folder-mapping.ts # Folder routing logic
-│   ├── ui/
-│   │   ├── EagleCacheManager.ts         # Cache operations
-│   │   ├── EagleHashStore.ts            # Dedup store
-│   │   ├── EagleUploader.ts             # Eagle REST client
-│   │   ├── EaglePluginSettingsTab.ts    # Settings UI
-│   │   ├── EagleSearchPickerModal.ts    # Search modal
-│   │   └── ImageUploadBlockingModal.ts  # Upload progress
-│   ├── utils/
-│   │   ├── file-url.ts          # file:// ↔ OS path
-│   │   ├── folder-mapping.ts    # Route resolution
-│   │   ├── markdown-image.ts    # Markdown parsing
-│   │   └── item-naming.ts       # Naming templates
-│   └── types/
-├── test/                        # Unit tests
-├── scripts/                     # Build & release
-└── manifest.json
-```
+The plugin makes HTTP requests only to the Eagle app's local API at the host and port configured in settings (default `http://localhost:41595`) to upload, search and list images. If you point the host at another machine, image data is sent to that machine. No telemetry, no other external services.
 
 ## Development
 
 ```bash
-pnpm install
-pnpm dev          # Watch mode + hot reload
-pnpm build        # Production build
-pnpm test         # Unit tests
-pnpm lint         # ESLint
-pnpm run ci       # Build + lint + test (pre-release check)
+bun install
+bun run dev       # esbuild watch into dist/
+bun run build     # Production build into dist/
+bun run ci        # Build + typecheck + lint + test
 ```
 
-`scripts/`, `.github/workflows/`, and `src/shared/` are repo-local helpers in this plugin. Keep them aligned with shared harness expectations when relevant, but treat implementation details here as the source of truth.
-
-See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed setup instructions.
+Releases are CI-only (`bun run release <patch|minor|major>` opens a version-bump PR).
 
 ## FAQ
 
 **Q: Is my data secure?**
-A: All images remain on your machine in Eagle's local library. No data is sent to external servers.
+A: All images remain on your machine in Eagle's local library. The plugin's only network access is HTTP requests to the Eagle app's local API (default `localhost:41595`, configurable host and port in settings). Nothing is sent to external servers.
 
 **Q: Can I undo an accidental upload?**
 A: Yes — delete it from Eagle directly. On the next tab switch, the plugin detects the deletion and removes the cache file.

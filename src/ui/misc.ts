@@ -1,6 +1,6 @@
 import { EditorPosition, ReferenceCache } from 'obsidian'
 
-import { PluginLogger } from '../shared/plugin-logger'
+import { PluginLogger } from '../utils/plugin-logger'
 import {
   detectImageFormat,
   isRenderableImageExtension,

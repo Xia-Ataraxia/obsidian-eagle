@@ -6,7 +6,7 @@ import type { NodeDataAdapter, NodeErrnoException } from '../types/obsidian'
 
 import EagleApiError from '../domain/EagleApiError'
 import { EaglePluginSettings } from '../domain/settings'
-import { PluginLogger } from '../shared/plugin-logger'
+import { PluginLogger } from '../utils/plugin-logger'
 import { safeDisplayName, safeImageExtension } from '../utils/eagle-path-contract'
 import { extractFileExtension } from '../utils/image-format'
 import { generatePseudoRandomId } from '../utils/pseudo-random'

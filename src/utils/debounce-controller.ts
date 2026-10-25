@@ -1,4 +1,3 @@
-// Repo-local shared helper for obsidian-eagle-plugin.
 
 export interface DebounceControllerOptions {
 	delayMs: number;
