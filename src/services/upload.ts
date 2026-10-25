@@ -8,7 +8,7 @@ import {
 
 import type EaglePlugin from '../main'
 
-import EagleApiError from '../domain/EagleApiError'
+import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { resolveMappedEagleFolder } from '../domain/folder-mapping'
 import { replaceFirstOccurrence } from '../ui/editor'
 import { fileUrlToOsPath } from '../ui/file-url'
@@ -167,20 +167,15 @@ export class UploadService {
         dedupHash = await EagleHashStore.computeHash(buffer)
         dedupLibraryPath = await this.plugin.eagleUploader.getLibraryRootPath(controller.signal) ?? null
         if (dedupLibraryPath) {
-          const existingItemId = this.plugin.hashStore.lookup(dedupHash, dedupLibraryPath)
-          if (existingItemId) {
-            this.plugin.notices.show('duplicate_detected')
-            const fileUrl = await this.plugin.eagleUploader.getFileUrlForItemId(existingItemId.itemId, controller.signal)
-            const ext = fileUrl.startsWith('file://') ? (extractFileExtension(fileUrl) || 'jpg') : 'jpg'
-            if (fileUrl.startsWith('file://')) {
-              await this.plugin.cacheManager.cacheFromOsPath(existingItemId.itemId, ext, fileUrlToOsPath(fileUrl), existingItemId.displayName).catch((e) => {
-                this.plugin.log.warn('cache write failed — image may appear broken', {})
-              })
+          const existing = this.plugin.hashStore.lookup(dedupHash, dedupLibraryPath)
+          if (existing) {
+            const reused = await this.reuseExistingItem(dedupHash, existing, controller.signal)
+            if (reused) {
+              markdownImage = reused
+              this.embedMarkDownImage(pasteId, markdownImage)
+              modal.close()
+              return markdownImage
             }
-            markdownImage = this.markdownImageFor(existingItemId.itemId, ext, existingItemId.displayName)
-            this.embedMarkDownImage(pasteId, markdownImage)
-            modal.close()
-            return markdownImage
           }
         }
       }
@@ -188,16 +183,16 @@ export class UploadService {
       const { itemId, fileUrl, ext } = await this.plugin.eagleUploader.upload(normalizedFile, { folderName, signal: controller.signal, displayName })
 
       if (fileUrl.startsWith('file://')) {
-        await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e) => {
-          this.plugin.log.warn('cache write failed — image may appear broken', {})
+        await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
+          this.plugin.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
         })
       }
 
       // Store hash for future deduplication (reuse pre-computed values)
       if (dedupHash && dedupLibraryPath) {
         this.plugin.hashStore.store(dedupHash, itemId, displayName, dedupLibraryPath)
-        await this.plugin.hashStore.save(this.plugin).catch((e) => {
-          this.plugin.log.warn('failed to store upload hash', {})
+        await this.plugin.hashStore.save(this.plugin).catch((e: unknown) => {
+          this.plugin.log.warn('failed to store upload hash', { err: e instanceof Error ? e.message : String(e) })
         })
       }
 
@@ -237,6 +232,30 @@ export class UploadService {
     modal.close()
     this.embedMarkDownImage(pasteId, markdownImage)
     return markdownImage
+  }
+
+  /** Returns the embed for a previously uploaded item, or null when Eagle no longer has it (hash evicted, caller re-uploads). */
+  private async reuseExistingItem(hash: string, existing: { itemId: string; displayName: string }, signal: AbortSignal): Promise<string | null> {
+    const { itemId, displayName } = existing
+    let fileUrl: string
+    try {
+      fileUrl = await this.plugin.eagleUploader.getFileUrlForItemId(itemId, signal)
+    } catch (e) {
+      // Eagle answered with an error for this id: the item is gone. Connectivity and abort errors still propagate.
+      if (!(e instanceof EagleApiError) || e instanceof EagleUnreachableError) throw e
+      fileUrl = ''
+    }
+    if (!fileUrl.startsWith('file://')) {
+      this.plugin.hashStore.evict(hash)
+      await this.plugin.hashStore.save(this.plugin)
+      return null
+    }
+    this.plugin.notices.show('duplicate_detected')
+    const ext = extractFileExtension(fileUrl) || 'jpg'
+    await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
+      this.plugin.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
+    })
+    return this.markdownImageFor(itemId, ext, displayName)
   }
 
   private async saveAsLocalAttachment(file: File): Promise<string> {
