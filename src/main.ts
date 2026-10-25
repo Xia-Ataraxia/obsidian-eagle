@@ -111,7 +111,7 @@ export default class EaglePlugin extends Plugin {
 
     menu.addItem((item) =>
       item
-        .setTitle('Upload to eagle')
+        .setTitle('Upload to Eagle')
         .setIcon('upload')
         .onClick(() => {
           void this.uploads.doUploadLocalImage({ image: localFile, editor, noteFile })
@@ -202,7 +202,7 @@ export default class EaglePlugin extends Plugin {
   private addUploadLocalCommand() {
     this.addCommand({
       id: 'upload-local',
-      name: 'Upload to eagle',
+      name: 'Upload to Eagle',
       editorCheckCallback: this.editorCheckCallbackForLocalUpload,
     })
   }
@@ -210,7 +210,7 @@ export default class EaglePlugin extends Plugin {
   private addImportFromEagleLibraryCommand() {
     this.addCommand({
       id: 'import-from-library',
-      name: 'Insert image from eagle (search)',
+      name: 'Insert image from Eagle (search)',
       editorCheckCallback: this.editorCheckCallbackForLibraryImport,
     })
   }
