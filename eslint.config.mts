@@ -88,7 +88,7 @@ export default tseslint.config(
 	},
 	// Script files (.mjs): Node CLI scripts outside tsconfig; untyped lint, console output is their UI.
 	{
-		files: ['scripts/**/*.mjs', 'tooling/**/*.mjs', '*.mjs'],
+		files: ['scripts/**/*.mjs', '*.mjs'],
 		extends: [tseslint.configs.disableTypeChecked],
 		languageOptions: {
 			globals: { ...globals.node },
