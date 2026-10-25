@@ -137,6 +137,12 @@ export function findMarkdownImageTokens(markdown: string): MarkdownImageToken[] 
   return tokens
 }
 
+export interface TextReplacement {
+  start: number
+  end: number
+  text: string
+}
+
 export interface WikilinkEmbedToken {
   itemId: string
   displayName: string | undefined
@@ -193,7 +199,7 @@ export function findEagleWikilinkTokens(markdown: string, cacheFolder: string): 
  */
 export function applyTextReplacements(
   content: string,
-  replacements: { start: number; end: number; text: string }[],
+  replacements: TextReplacement[],
 ): string {
   const sorted = [...replacements].sort((a, b) => b.start - a.start)
   let result = content
