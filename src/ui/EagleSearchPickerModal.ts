@@ -23,7 +23,7 @@ export default class EagleSearchPickerModal extends Modal {
   private results: EagleItemSearchResult[] = []
   private readonly thumbFallbackMap = new Map<string, { wrapper: HTMLElement; ext?: string }>()
   private activeSearchToken = 0
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null
+  private debounceTimer: number | null = null
   private isThumbnailFallbackLoading = false
   private statusKind: PickerStatus = 'idle'
 
@@ -67,7 +67,7 @@ export default class EagleSearchPickerModal extends Modal {
       text: 'Type a keyword to search eagle images.',
     })
 
-    this.gridEl = contentEl.createEl('div', { cls: 'eagle-picker-grid' })
+    this.gridEl = contentEl.createDiv({ cls: 'eagle-picker-grid' })
     this.gridEl.addEventListener('keydown', (e: KeyboardEvent) => {
       this.handleGridArrowNav(e)
     })
@@ -77,7 +77,7 @@ export default class EagleSearchPickerModal extends Modal {
 
   override onClose(): void {
     if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer)
+      window.clearTimeout(this.debounceTimer)
       this.debounceTimer = null
     }
 
@@ -109,7 +109,7 @@ export default class EagleSearchPickerModal extends Modal {
 
   private scheduleSearch(immediate: boolean): void {
     if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer)
+      window.clearTimeout(this.debounceTimer)
       this.debounceTimer = null
     }
 
@@ -118,7 +118,7 @@ export default class EagleSearchPickerModal extends Modal {
       return
     }
 
-    this.debounceTimer = setTimeout(() => {
+    this.debounceTimer = window.setTimeout(() => {
       this.debounceTimer = null
       void this.runSearch()
     }, this.debounceMs)
@@ -140,7 +140,7 @@ export default class EagleSearchPickerModal extends Modal {
 
     this.gridEl.empty()
     for (let i = 0; i < 6; i++) {
-      this.gridEl.createEl('div', { cls: 'eagle-skeleton-card' })
+      this.gridEl.createDiv({ cls: 'eagle-skeleton-card' })
     }
 
     try {
@@ -268,12 +268,12 @@ export default class EagleSearchPickerModal extends Modal {
   }
 
   private renderCard(item: EagleItemSearchResult, token: number): void {
-    const card = this.gridEl.createEl('div', {
+    const card = this.gridEl.createDiv({
       cls: 'eagle-picker-item',
       attr: { role: 'button', tabindex: '0' },
     })
 
-    const thumbWrapper = card.createEl('div', { cls: 'eagle-picker-thumb' })
+    const thumbWrapper = card.createDiv({ cls: 'eagle-picker-thumb' })
     if (item.thumbnail) {
       const resolvedUrl = this.uploader.resolveSearchThumbnailUrl(item.thumbnail)
       this.debugLog('thumbnail:metadata', {
@@ -303,14 +303,14 @@ export default class EagleSearchPickerModal extends Modal {
       void this.loadThumbnails(token)
     }
 
-    card.createEl('span', {
+    card.createSpan({
       cls: 'eagle-picker-name',
       text: item.name || item.id,
     })
 
     // Tags
     if (item.tags?.length) {
-      card.createEl('span', {
+      card.createSpan({
         cls: 'eagle-picker-tags',
         text: item.tags.slice(0, 3).join(', ') + (item.tags.length > 3 ? ' \u2026' : ''),
       })
@@ -318,7 +318,7 @@ export default class EagleSearchPickerModal extends Modal {
 
     // Annotation (truncated)
     if (item.annotation) {
-      card.createEl('span', {
+      card.createSpan({
         cls: 'eagle-picker-annotation',
         text: item.annotation.length > 40 ? item.annotation.slice(0, 40) + '\u2026' : item.annotation,
       })
@@ -340,7 +340,7 @@ export default class EagleSearchPickerModal extends Modal {
 
   private appendExtBadge(thumbWrapper: HTMLElement, ext?: string): void {
     if (ext) {
-      thumbWrapper.createEl('span', {
+      thumbWrapper.createSpan({
         cls: 'eagle-picker-ext-badge',
         text: ext.toUpperCase(),
       })
@@ -349,7 +349,7 @@ export default class EagleSearchPickerModal extends Modal {
 
   private enqueueThumbnailFallback(item: EagleItemSearchResult, thumbWrapper: HTMLElement): void {
     thumbWrapper.empty()
-    thumbWrapper.createEl('span', {
+    thumbWrapper.createSpan({
       cls: 'eagle-picker-no-thumb',
       text: item.ext?.toUpperCase() ?? '?',
     })

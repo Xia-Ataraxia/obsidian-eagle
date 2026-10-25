@@ -47,7 +47,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     this.plugin = plugin
   }
 
-  display(): void {
+  override display(): void {
     const { containerEl } = this
 
     this.originalCacheFolderName = this.plugin.settings.cacheFolderName
@@ -57,7 +57,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     // ── Connection ──────────────────────────────────────────────────────────
     new Setting(containerEl).setHeading().setName('Connection')
 
-    const statusBadge = containerEl.createEl('div', { cls: 'eagle-connection-status', text: '○ checking…' })
+    const statusBadge = containerEl.createDiv({ cls: 'eagle-connection-status', text: '○ checking…' })
 
     new Setting(containerEl)
       .setName('Eagle API host')
@@ -236,7 +236,6 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
         slider
           .setLimits(100, 1000, 50)
           .setValue(this.plugin.settings.searchDebounceMs)
-          .setDynamicTooltip()
           .onChange((value) => {
             this.plugin.settings.searchDebounceMs = value
             void this.plugin.saveSettings()
@@ -359,7 +358,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
 
     // ── Obsidian folder: text + Browse ──────────────────────────────────────
     const obsidianInput = new TextComponent(row)
-      .setPlaceholder('Obsidian folder (e.g. Projects/Design)')
+      .setPlaceholder('Obsidian folder (e.g. Projects/design)')
       .setValue(mapping.obsidianFolder)
       .onChange((newValue) => {
         const m = this.plugin.settings.folderMappings[index]
@@ -481,20 +480,20 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     this.previewDescEl.empty()
 
     if (matchedEagleFolder && matchedObsidianRule) {
-      this.previewDescEl.createEl('span', { text: `Note folder: ${notePath}` })
+      this.previewDescEl.createSpan({ text: `Note folder: ${notePath}` })
       this.previewDescEl.createEl('br')
-      this.previewDescEl.createEl('span', { text: `Eagle folder: ${matchedEagleFolder}` })
+      this.previewDescEl.createSpan({ text: `Eagle folder: ${matchedEagleFolder}` })
       this.previewDescEl.createEl('br')
-      this.previewDescEl.createEl('span', { text: `Matched rule: ${matchedObsidianRule} → ${matchedEagleFolder}` })
+      this.previewDescEl.createSpan({ text: `Matched rule: ${matchedObsidianRule} → ${matchedEagleFolder}` })
       return
     }
 
     const fallback = settings.eagleFolderName.trim()
-    this.previewDescEl.createEl('span', { text: `Note folder: ${notePath}` })
+    this.previewDescEl.createSpan({ text: `Note folder: ${notePath}` })
     this.previewDescEl.createEl('br')
-    this.previewDescEl.createEl('span', { text: `Eagle folder: ${fallback || '(Eagle default folder)'}` })
+    this.previewDescEl.createSpan({ text: `Eagle folder: ${fallback || '(Eagle default folder)'}` })
     this.previewDescEl.createEl('br')
-    this.previewDescEl.createEl('span', { text: 'Matched rule: default folder' })
+    this.previewDescEl.createSpan({ text: 'Matched rule: default folder' })
   }
 
   override hide() {
