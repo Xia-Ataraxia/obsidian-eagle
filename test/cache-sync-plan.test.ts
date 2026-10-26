@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import EagleApiError, { EagleNotFoundError, EagleUnreachableError } from '../src/domain/EagleApiError'
-import { ERROR_RETRY_MS, UPLOAD_RETRY_MS, contentFingerprint, isSameLibrary, legacyMigrationComplete, marksChecked, outcomeForError, planCacheSync, retryPlan, shouldReportProgress } from '../src/utils/cache-sync-plan'
+import { ERROR_RETRY_MS, UPLOAD_RETRY_MS, contentFingerprint, isSameLibrary, marksChecked, outcomeForError, planCacheSync, retryPlan } from '../src/utils/cache-sync-plan'
 import { findEagleWikilinkTokens } from '../src/utils/markdown-image'
 
 const tokens = (md: string) => findEagleWikilinkTokens(md, 'eagle-cache')
@@ -9,20 +9,17 @@ const ids = (list: { itemId: string }[]) => list.map((t) => t.itemId)
 
 describe(planCacheSync, () => {
   it('skips notes without cache links', () => {
-    expect(planCacheSync(tokens('# plain note ![[photo.png]]'), new Set(), true)).toEqual({ items: [], legacy: [] })
+    expect(planCacheSync(tokens('# plain note ![[photo.png]]'), new Set())).toEqual({ items: [], legacy: [] })
   })
 
   it('lists each unchecked item once', () => {
-    const plan = planCacheSync(tokens('![[eagle-cache/Sky_ABC.png]] ![[eagle-cache/Sky_ABC.png|300]] ![[eagle-cache/Sea_DEF.jpg]]'), new Set(['DEF']), false)
+    const plan = planCacheSync(tokens('![[eagle-cache/Sky_ABC.png]] ![[eagle-cache/Sky_ABC.png|300]] ![[eagle-cache/Sea_DEF.jpg]]'), new Set(['DEF']))
     expect(ids(plan.items)).toEqual(['ABC'])
   })
 
-  it('splits legacy links out only for the rename, otherwise backfills them as they are', () => {
-    const md = '![[eagle-cache/OLD.png]] ![[eagle-cache/Sky_ABC.png]]'
-    const renaming = planCacheSync(tokens(md), new Set(), true)
-    expect([ids(renaming.items), ids(renaming.legacy)]).toEqual([['ABC'], ['OLD']])
-    const passive = planCacheSync(tokens(md), new Set(), false)
-    expect([ids(passive.items), passive.items[0]?.displayName, passive.legacy]).toEqual([['OLD', 'ABC'], undefined, []])
+  it('splits legacy links out and keeps them even once checked, since every note linking them moves', () => {
+    const plan = planCacheSync(tokens('![[eagle-cache/OLD.png]] ![[eagle-cache/OLD.png|200]] ![[eagle-cache/Sky_ABC.png]]'), new Set(['OLD']))
+    expect([ids(plan.items), ids(plan.legacy)]).toEqual([['ABC'], ['OLD']])
   })
 })
 
@@ -53,29 +50,6 @@ describe(retryPlan, () => {
     expect(retryPlan(['error', 'uploading'], 0)).toEqual({ delayMs: ERROR_RETRY_MS, repeat: false })
     expect(retryPlan(['uploading'], 0)).toEqual({ delayMs: UPLOAD_RETRY_MS, repeat: true })
     expect(retryPlan(['present', 'failed', 'missing'], 0)).toBeNull()
-  })
-})
-
-describe(legacyMigrationComplete, () => {
-  it('needs an answer from Eagle for every legacy link', () => {
-    expect(legacyMigrationComplete([], 0)).toBe(true)
-    expect(legacyMigrationComplete(['missing'], 0)).toBe(true)
-    expect(legacyMigrationComplete(['missing', 'unreachable'], 0)).toBe(false)
-    expect(legacyMigrationComplete(['failed'], 0)).toBe(false)
-    expect(legacyMigrationComplete(['error'], 0)).toBe(false)
-  })
-
-  it('stays unmigrated while any link could not be rewritten', () => {
-    expect(legacyMigrationComplete(['cached'], 1)).toBe(false)
-  })
-})
-
-describe(shouldReportProgress, () => {
-  it('reports every 25 files, every 250 ms, and at the end', () => {
-    expect(shouldReportProgress(3, 100, 1000, 1100)).toBe(false)
-    expect(shouldReportProgress(25, 100, 1000, 1100)).toBe(true)
-    expect(shouldReportProgress(3, 100, 1000, 1250)).toBe(true)
-    expect(shouldReportProgress(100, 100, 1000, 1001)).toBe(true)
   })
 })
 

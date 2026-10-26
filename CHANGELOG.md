@@ -1,5 +1,17 @@
 # obsidian-eagle-plugin changelog
 
+## [Unreleased]
+
+### Removed
+
+- **Sync Eagle cache for all notes** and **Migrate all images to the cache folder** commands. They read every note in the vault; the plugin now only reads the note you have open.
+
+### Changed
+
+- Older `<id>.<ext>` cache links are renamed to `<name>_<id>.<ext>` per note when you open or edit it. The old cache file is kept, since other notes may still link it.
+- Renaming the cache folder finds the notes to update from Obsidian's link index instead of reading every note.
+- Links from versions before 2.0 (`![eagle:ID](...)`) still render but are no longer converted.
+
 ## [2.0.9] - 2026-02-21
 
 ### Fixed

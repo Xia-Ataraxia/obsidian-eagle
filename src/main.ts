@@ -26,7 +26,6 @@ import { fileUrlToDisplayUrl, fileUrlToOsPath } from './ui/file-url'
 import { uploadPlaceholderExtension } from './ui/upload-placeholder-widget'
 import { renameCache } from './services/cache-rename'
 import { CacheSyncService } from './services/cache-sync'
-import { ImageMigrationService } from './services/image-migration'
 import { UploadService } from './services/upload'
 import { UploadProgress } from './services/upload-progress'
 import { eagleItemIdFromAlt, eagleItemIdFromLink } from './utils/eagle-item-id'
@@ -36,12 +35,6 @@ import { SerializedDataFile } from './utils/serialized-data-file'
 
 const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
   links_updated: { template: 'Updated {{links}} in {{files}}.' },
-  migrate_none: { template: 'No images to migrate.' },
-  migrate_progress: { template: '{{step}}', timeout: 0, immutable: true },
-  migrate_done: { template: 'Migrated {{images}} to {{folder}}.{{failureSuffix}}', timeout: 8000 },
-  cache_sync_progress: { template: '{{step}}', timeout: 0, immutable: true },
-  cache_sync_current: { template: 'Cache is already up to date.' },
-  cache_sync_done: { template: 'Cached {{images}}.{{failureSuffix}}', timeout: 8000 },
   import_failed_api: { template: "Couldn't import from Eagle. {{message}}" },
   import_failed: { template: "Couldn't insert the Eagle image." },
   no_active_editor: { template: 'Open a note to upload images.' },
@@ -96,7 +89,6 @@ export default class EaglePlugin extends Plugin {
   private readonly uploads = new UploadService(this)
   readonly uploadProgress = new UploadProgress(() => this.notices)
   readonly cacheSync = new CacheSyncService(this)
-  private readonly imageMigration = new ImageMigrationService(this)
   private readonly fileOpenSync = debounce((file: TFile) => void this.cacheSync.syncNote(file, true), 500, true)
   // Per note, so typing or a burst of saves syncs once after the edits settle.
   private readonly changeSyncs = new Map<string, Debouncer<[TFile], void>>()
@@ -184,8 +176,6 @@ export default class EaglePlugin extends Plugin {
     this.setupEagleHandlers()
     this.addUploadLocalCommand()
     this.addImportFromEagleLibraryCommand()
-    this.addMigrateAllImagesCommand()
-    this.addSyncCacheCommand()
     this.registerEagleImageRenderer()
     this.app.workspace.onLayoutReady(() => {
       // file-open for the restored note fired before the plugin loaded; restored tabs and popouts get the backfill.
@@ -194,7 +184,6 @@ export default class EaglePlugin extends Plugin {
         this.app.metadataCache.on('changed', (file, content) => {
           // Bulk external changes (git pull, sync) must not queue Eagle calls for notes nobody is viewing.
           if (file.extension !== 'md' || this.cacheSync.isOwnWrite(file.path, content)) return
-          this.cacheSync.noteChanged(file.path)
           if (this.openNotePaths().has(file.path)) this.changeSyncFor(file.path)(file)
         }),
       )
@@ -301,26 +290,6 @@ export default class EaglePlugin extends Plugin {
       id: 'import-from-library',
       name: 'Insert image from Eagle (search)',
       editorCheckCallback: this.editorCheckCallbackForLibraryImport,
-    })
-  }
-
-  private addMigrateAllImagesCommand() {
-    this.addCommand({
-      id: 'migrate-all-images',
-      name: 'Migrate all images to the cache folder',
-      callback: () => {
-        void this.imageMigration.migrateAllImages()
-      },
-    })
-  }
-
-  private addSyncCacheCommand() {
-    this.addCommand({
-      id: 'sync-cache-all-notes',
-      name: 'Sync Eagle cache for all notes',
-      callback: () => {
-        void this.cacheSync.syncAllNotes()
-      },
     })
   }
 
