@@ -27,8 +27,8 @@
 
 .eagle-picker-search:focus {
   outline: none;
-  border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+  border-color: var(--background-modifier-border-focus);
+  box-shadow: 0 0 0 1px var(--background-modifier-border-focus);
 }
 
 .eagle-picker-grid {
@@ -177,14 +177,6 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.eagle-picker-empty {
-  grid-column: 1 / -1;
-  text-align: center;
-  color: var(--text-muted);
-  padding: 2rem 0;
-  margin: 0;
 }
 
 .eagle-picker-status {
