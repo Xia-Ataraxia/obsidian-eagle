@@ -1,4 +1,4 @@
-import { Notice, setIcon } from 'obsidian';
+import { Notice, setIcon, setTooltip } from 'obsidian';
 
 export interface NoticeDefinition {
 	template: string;
@@ -11,6 +11,8 @@ export type NoticeCatalog = Record<string, NoticeDefinition>;
 export interface NoticeShowOptions {
 	timeout?: number;
 	button?: { text: string; callback: () => void };
+	/** Renders a progress bar; re-show the same id to advance it. */
+	progress?: { done: number; total: number };
 }
 
 export interface PluginNoticesHost {
@@ -40,7 +42,7 @@ export class PluginNotices {
 		const immutable = definition?.immutable ?? false;
 
 		const message = this.interpolate(template, params ?? {});
-		const fragment = this.buildFragment(id, message, { button: opts?.button, immutable });
+		const fragment = this.buildFragment(id, message, { button: opts?.button, progress: opts?.progress, immutable });
 
 		const existing = this.active.get(id);
 		if (existing) {
@@ -148,50 +150,38 @@ export class PluginNotices {
 	private buildFragment(
 		id: string,
 		text: string,
-		opts: { button?: { text: string; callback: () => void }; immutable: boolean }
+		opts: { button?: { text: string; callback: () => void }; progress?: { done: number; total: number }; immutable: boolean }
 	): DocumentFragment {
 		const fragment = createFragment();
-		const wrapper = createDiv({ cls: 'plugin-notice' });
+		const wrapper = fragment.createDiv({ cls: 'eagle-notice' });
+		wrapper.createEl('p', { cls: 'eagle-notice-head', text: this.prefix });
 
-		const head = createEl('p', { cls: 'plugin-notice-head', text: `[${this.prefix}]` });
-		wrapper.appendChild(head);
+		const row = wrapper.createDiv({ cls: 'eagle-notice-row' });
+		row.createEl('p', { cls: 'eagle-notice-content', text });
 
-		const body = createEl('p', { cls: 'plugin-notice-content', text });
-		wrapper.appendChild(body);
-
-		const actions = createDiv({ cls: 'plugin-notice-actions' });
-
+		const actions = row.createDiv({ cls: 'eagle-notice-actions' });
 		if (opts.button?.text && typeof opts.button.callback === 'function') {
-			const btn = this.createActionButton(opts.button.text, () => {
+			const btn = actions.createEl('button', { cls: 'eagle-notice-btn', type: 'button', text: opts.button.text });
+			btn.addEventListener('click', () => {
 				opts.button?.callback();
 				this.remove(id);
 			});
-			actions.appendChild(btn);
+		}
+		if (!opts.immutable) this.createMuteButton(actions, id);
+		if (actions.childElementCount === 0) actions.remove();
+
+		if (opts.progress) {
+			const { done, total } = opts.progress;
+			wrapper.createEl('progress', { cls: 'eagle-notice-progress', attr: { value: done, max: Math.max(total, 1) } });
 		}
 
-		if (!opts.immutable) {
-			const muteBtn = this.createMuteButton(id);
-			actions.appendChild(muteBtn);
-		}
-
-		if (actions.childElementCount > 0) {
-			wrapper.appendChild(actions);
-		}
-
-		fragment.appendChild(wrapper);
 		return fragment;
 	}
 
-	private createActionButton(text: string, callback: () => void): HTMLButtonElement {
-		const button = createEl('button', { cls: 'plugin-notice-btn', type: 'button', text });
-		button.addEventListener('click', callback);
-		return button;
-	}
-
-	private createMuteButton(id: string): HTMLButtonElement {
-		const button = createEl('button', { cls: 'plugin-notice-btn plugin-notice-btn--mute', type: 'button' });
-		button.setAttribute('aria-label', `Mute notice: ${id}`);
+	private createMuteButton(parent: HTMLElement, id: string): void {
+		const button = parent.createEl('button', { cls: 'eagle-notice-btn eagle-notice-mute', type: 'button' });
 		setIcon(button, 'bell-off');
+		setTooltip(button, 'Mute this notice');
 		button.addEventListener('click', () => {
 			void this.mute(id)
 				.then(() => {
@@ -202,7 +192,6 @@ export class PluginNotices {
 					console.error(`[${this.prefix}] Failed to mute notice:`, err);
 				});
 		});
-		return button;
 	}
 
 	private scheduleCleanup(id: string, timeout: number): void {
