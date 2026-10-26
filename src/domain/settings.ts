@@ -1,3 +1,5 @@
+import { sanitizeFolderMappings } from './folder-mapping'
+
 export interface ObsidianEagleFolderMapping {
   obsidianFolder: string
   eagleFolder: string
@@ -38,4 +40,9 @@ export const DEFAULT_SETTINGS: EaglePluginSettings = {
 export function settingsFromSavedData(raw: unknown): EaglePluginSettings {
   const { [HASH_STORE_KEY]: _hashStore, ...saved } = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   return { ...DEFAULT_SETTINGS, ...(saved as Partial<EaglePluginSettings>) }
+}
+
+/** Persisted copy; the live settings keep in-progress (incomplete) mapping rows that the settings UI still edits. */
+export function settingsForPersist(settings: EaglePluginSettings): EaglePluginSettings {
+  return { ...settings, folderMappings: sanitizeFolderMappings(settings.folderMappings ?? []) }
 }

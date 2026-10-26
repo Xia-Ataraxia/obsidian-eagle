@@ -105,8 +105,8 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
           this.plugin.settings.folderMappings.splice(index, 1)
           this.update()
         },
-        items: this.plugin.settings.folderMappings.map((mapping) => ({
-          name: 'Folder mapping',
+        items: this.plugin.settings.folderMappings.map((mapping, index) => ({
+          name: `Folder mapping ${index + 1}`,
           render: (setting: Setting) => this.renderFolderMappingRow(setting, mapping),
         })),
       },

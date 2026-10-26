@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { DEFAULT_SETTINGS, HASH_STORE_KEY, settingsFromSavedData } from '../src/domain/settings'
+import { DEFAULT_SETTINGS, HASH_STORE_KEY, settingsForPersist, settingsFromSavedData } from '../src/domain/settings'
 
 describe(settingsFromSavedData, () => {
   it('keeps the hash store out of settings so saving settings cannot overwrite it', () => {
@@ -12,5 +12,20 @@ describe(settingsFromSavedData, () => {
   it('falls back to defaults for missing or empty data', () => {
     expect(settingsFromSavedData(null)).toEqual(DEFAULT_SETTINGS)
     expect(settingsFromSavedData({}).cacheFolderName).toBe('eagle-cache')
+  })
+})
+
+describe(settingsForPersist, () => {
+  it('drops incomplete mapping rows from the saved copy without touching live settings', () => {
+    const live = {
+      ...DEFAULT_SETTINGS,
+      folderMappings: [
+        { obsidianFolder: '', eagleFolder: '' },
+        { obsidianFolder: 'Projects', eagleFolder: 'Design' },
+      ],
+    }
+    const saved = settingsForPersist(live)
+    expect(saved.folderMappings).toEqual([{ obsidianFolder: 'Projects', eagleFolder: 'Design' }])
+    expect(live.folderMappings).toHaveLength(2)
   })
 })
