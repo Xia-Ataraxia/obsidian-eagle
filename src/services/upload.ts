@@ -259,11 +259,16 @@ export class UploadService {
   }
 
   async saveAsLocalAttachment(file: File): Promise<string> {
+    const { fileManager, workspace } = this.plugin.app
+    const sourcePath = workspace.getActiveFile()?.path ?? ''
+    return `!${fileManager.generateMarkdownLink(await this.saveAttachmentFile(file), sourcePath)}`
+  }
+
+  async saveAttachmentFile(file: File): Promise<TFile> {
     const { fileManager, vault, workspace } = this.plugin.app
     const sourcePath = workspace.getActiveFile()?.path ?? ''
     const path = await fileManager.getAvailablePathForAttachment(file.name || 'Pasted image.png', sourcePath)
-    const saved = await vault.createBinary(path, await file.arrayBuffer())
-    return `!${fileManager.generateMarkdownLink(saved, sourcePath)}`
+    return vault.createBinary(path, await file.arrayBuffer())
   }
 
   private insertTemporaryText(pasteId: string, atPos?: EditorPosition) {

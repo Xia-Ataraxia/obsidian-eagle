@@ -98,6 +98,12 @@
   flex-shrink: 0;
 }
 
+.eagle-picker-thumb.is-loading {
+  background: linear-gradient(90deg, var(--background-secondary) 25%, var(--background-modifier-hover) 50%, var(--background-secondary) 75%);
+  background-size: 200% 100%;
+  animation: eagle-shimmer 1.6s infinite;
+}
+
 .eagle-picker-img {
   width: 100%;
   height: 100%;
@@ -120,7 +126,9 @@
 
 .eagle-picker-missing {
   display: flex;
-  color: var(--text-faint);
+  color: var(--text-muted);
+  --icon-size: 24px;
+  animation: eagle-fade-in 0.25s ease;
 }
 
 .eagle-picker-name {
@@ -209,6 +217,23 @@
 
 @keyframes eagle-shimmer {
   to { background-position: -200% 0; }
+}
+
+/* ── Save feedback ──────────────────────────────────────────────────────── */
+
+@keyframes eagle-input-saved {
+  0% { border-color: var(--text-success); box-shadow: 0 0 0 2px var(--background-modifier-success); }
+  100% { border-color: var(--background-modifier-border); box-shadow: 0 0 0 0 transparent; }
+}
+
+.eagle-input-saved {
+  animation: eagle-input-saved 0.9s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eagle-input-saved {
+    animation-duration: 0.3s;
+  }
 }
 
 /* ── Connection Status Badge ────────────────────────────────────────────── */
@@ -322,6 +347,10 @@
   from { opacity: 0; transform: translateY(6px) scale(0.97); }
 }
 
+@keyframes eagle-fade-in {
+  from { opacity: 0; }
+}
+
 @keyframes eagle-card-fade {
   from { opacity: 0; }
 }
@@ -332,6 +361,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .eagle-picker-img,
+  .eagle-picker-missing {
+    transition-duration: 0.1s;
+    animation-duration: 0.1s;
+  }
+
   .eagle-picker-item {
     animation: eagle-card-fade 0.5s ease backwards;
   }
@@ -342,7 +377,8 @@
     transform: none;
   }
 
-  .eagle-skeleton-card {
+  .eagle-skeleton-card,
+  .eagle-picker-thumb.is-loading {
     animation: eagle-pulse 2.4s ease-in-out infinite;
   }
 }

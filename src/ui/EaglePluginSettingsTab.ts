@@ -230,6 +230,14 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     dropdown.setValue(current)
   }
 
+  private async saveWithFlash(el: HTMLElement): Promise<void> {
+    await this.plugin.saveSettings()
+    el.removeClass('eagle-input-saved')
+    void el.offsetWidth // restart the animation when saved twice in a row
+    el.addClass('eagle-input-saved')
+    el.addEventListener('animationend', () => el.removeClass('eagle-input-saved'), { once: true })
+  }
+
   private renderCacheFolder(setting: Setting): void {
     let input: TextComponent
     setting
@@ -240,7 +248,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.cacheFolderName)
           // In-memory while typing; persisted on blur and in hide() so partial names never hit data.json.
           .onChange((value) => { this.plugin.settings.cacheFolderName = value.trim() || 'eagle-cache' })
-        text.inputEl.addEventListener('blur', () => void this.plugin.saveSettings())
+        text.inputEl.addEventListener('blur', () => void this.saveWithFlash(text.inputEl))
       })
       .addButton((btn) => {
         btn.setButtonText('Browse').onClick(() => {

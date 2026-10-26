@@ -1,8 +1,9 @@
-import { Canvas } from 'obsidian'
+import { Canvas, Point } from 'obsidian'
 
 import type EaglePlugin from '../main'
 
 import { buildPasteEventCopy } from '../utils/events'
+import { canvasNodeSizeForImage } from '../utils/canvas-size'
 import { allFilesAreImages } from '../utils/FileList'
 import ImageUploadBlockingModal from './ImageUploadBlockingModal'
 
@@ -60,7 +61,8 @@ async function uploadImageOnCanvas(
     if (!modal.isOpen) return
 
     modal.close()
-    pasteImageToCanvas(canvas, `![eagle:${itemId}](${fileUrl})`)
+    const size = await imageNodeSize(file)
+    canvas.createTextNode({ pos: nextPastePos(canvas), size, position: 'center', text: `![eagle:${itemId}](${fileUrl})` })
   } catch (err: unknown) {
     modal.close()
     if (err instanceof DOMException && err.name === 'AbortError') {
@@ -68,15 +70,32 @@ async function uploadImageOnCanvas(
     }
     // The clipboard is empty once this handler has awaited, so the original handler cannot recover the image; keep it in the vault.
     plugin.log.warn('Eagle upload failed on canvas, saving locally', { err: err instanceof Error ? err.message : String(err) })
-    pasteImageToCanvas(canvas, await plugin.saveImageLocally(file))
+    const saved = await plugin.saveImageLocally(file)
+    canvas.createFileNode({ pos: nextPastePos(canvas), size: await imageNodeSize(file), position: 'center', file: saved })
     plugin.notices.show('saved_locally')
   }
 }
 
-function pasteImageToCanvas(canvas: Canvas, text: string) {
-  canvas.createTextNode({
-    pos: canvas.posCenter(),
-    position: 'center',
-    text,
-  })
+async function imageNodeSize(file: File) {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const size = canvasNodeSizeForImage(bitmap.width, bitmap.height)
+    bitmap.close()
+    return size
+  } catch {
+    return canvasNodeSizeForImage(0, 0)
+  }
+}
+
+const CASCADE_STEP = 28
+const lastPaste = new WeakMap<Canvas, { center: Point; pos: Point }>()
+
+/** Repeated pastes at the same viewport center cascade diagonally instead of stacking. */
+function nextPastePos(canvas: Canvas): Point {
+  const center = canvas.posCenter()
+  const last = lastPaste.get(canvas)
+  const sameView = last && last.center.x === center.x && last.center.y === center.y
+  const pos = sameView ? { x: last.pos.x + CASCADE_STEP, y: last.pos.y + CASCADE_STEP } : center
+  lastPaste.set(canvas, { center, pos })
+  return pos
 }

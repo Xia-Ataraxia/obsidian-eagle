@@ -278,7 +278,7 @@ export default class EagleSearchPickerModal extends Modal {
       attr: { role: 'button', tabindex: '0' },
     })
 
-    const thumbWrapper = card.createDiv({ cls: 'eagle-picker-thumb' })
+    const thumbWrapper = card.createDiv({ cls: ['eagle-picker-thumb', 'is-loading'] })
     if (item.thumbnail) {
       const resolvedUrl = this.uploader.resolveSearchThumbnailUrl(item.thumbnail)
       this.debugLog('thumbnail:metadata', {
@@ -293,7 +293,10 @@ export default class EagleSearchPickerModal extends Modal {
         cls: 'eagle-picker-img',
         attr: { src: fileUrlToDisplayUrl(resolvedUrl), loading: 'lazy', alt: item.name || item.id },
       })
-      img.addEventListener('load', () => img.addClass('is-loaded'))
+      img.addEventListener('load', () => {
+        img.addClass('is-loaded')
+        thumbWrapper.removeClass('is-loading')
+      })
       img.addEventListener('error', () => {
         this.debugLog('thumbnail:metadata:error', {
           token,
@@ -354,6 +357,7 @@ export default class EagleSearchPickerModal extends Modal {
   }
 
   private showImageMissing(thumbWrapper: HTMLElement, ext?: string): void {
+    thumbWrapper.removeClass('is-loading')
     thumbWrapper.empty()
     setIcon(thumbWrapper.createSpan({ cls: 'eagle-picker-missing' }), 'image-off')
     this.appendExtBadge(thumbWrapper, ext)
@@ -431,7 +435,10 @@ export default class EagleSearchPickerModal extends Modal {
                 cls: 'eagle-picker-img',
                 attr: { src: fileUrlToDisplayUrl(thumbnailUrl), loading: 'lazy', alt: item.name || item.id },
               })
-              fallbackImg.addEventListener('load', () => fallbackImg.addClass('is-loaded'))
+              fallbackImg.addEventListener('load', () => {
+                fallbackImg.addClass('is-loaded')
+                thumbWrapper.removeClass('is-loading')
+              })
               fallbackImg.addEventListener('error', () => this.showImageMissing(thumbWrapper, ext))
               this.appendExtBadge(thumbWrapper, ext)
               this.thumbFallbackMap.delete(item.id)

@@ -139,8 +139,8 @@ export default class EaglePlugin extends Plugin {
     return template.replace(/{{\s*[\w.-]+\s*}}/g, '…')
   }
 
-  saveImageLocally(file: File): Promise<string> {
-    return this.uploads.saveAsLocalAttachment(file)
+  saveImageLocally(file: File): Promise<TFile> {
+    return this.uploads.saveAttachmentFile(file)
   }
 
   async saveSettings(): Promise<void> {
