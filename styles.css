@@ -25,12 +25,6 @@
   font-size: var(--font-ui-medium);
 }
 
-.eagle-picker-search:focus {
-  outline: none;
-  border-color: var(--background-modifier-border-focus);
-  box-shadow: 0 0 0 1px var(--background-modifier-border-focus);
-}
-
 .eagle-picker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
