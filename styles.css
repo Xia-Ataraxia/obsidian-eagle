@@ -3,13 +3,15 @@
 .eagle-picker-modal {
   --eagle-spring: linear(0, 0.55 12%, 0.9 28%, 1.04 44%, 1.01 62%, 1);
   width: min(760px, 90vw);
+  padding-bottom: 0;
 }
 
 .eagle-picker-modal .modal-content {
   display: flex;
   flex-direction: column;
   height: min(560px, 80vh);
-  padding: 12px 16px 16px;
+  /* The grid scrolls to the modal's bottom edge; its own padding keeps the last row clear. */
+  padding: 12px 16px 0;
 }
 
 .eagle-picker-search {
@@ -32,10 +34,17 @@
   overflow-y: auto;
   flex: 1;
   align-content: start;
+  padding: 2px 0 16px;
 }
 
 .eagle-picker-empty-state {
   grid-column: 1 / -1;
+}
+
+.eagle-picker-empty-hint {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  text-align: center;
 }
 
 .eagle-picker-empty-state .modal-button-container {
@@ -118,9 +127,14 @@
   letter-spacing: 0.5px;
 }
 
+.eagle-picker-thumb.is-missing {
+  background: transparent;
+  border: 1px dashed var(--background-modifier-border);
+}
+
 .eagle-picker-missing {
   display: flex;
-  color: var(--text-muted);
+  color: var(--text-faint);
   --icon-size: 24px;
   animation: eagle-fade-in 0.25s ease;
 }
@@ -199,6 +213,13 @@
   animation: eagle-shimmer 1.2s infinite;
   border-radius: var(--radius-m);
   aspect-ratio: 1;
+}
+
+/* Dark themes flatten the default band; lift it off the surface with the text color. */
+.theme-dark .eagle-skeleton-card,
+.theme-dark .eagle-picker-thumb.is-loading {
+  background-image: linear-gradient(90deg, transparent 25%, color-mix(in srgb, var(--text-normal) 9%, transparent) 50%, transparent 75%);
+  background-color: var(--background-modifier-border);
 }
 
 @keyframes eagle-shimmer {

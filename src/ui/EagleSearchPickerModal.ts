@@ -212,8 +212,8 @@ export default class EagleSearchPickerModal extends Modal {
       // The status line already explains a failed search and an empty library.
       if (this.statusKind === 'info') {
         emptyState.createEl('p', {
-          text: 'No results.',
-          cls: 'eagle-picker-empty',
+          text: 'Try fewer words, or a different #tag.',
+          cls: 'eagle-picker-empty-hint',
         })
       }
       const actions = emptyState.createDiv({ cls: 'modal-button-container' })
@@ -354,6 +354,8 @@ export default class EagleSearchPickerModal extends Modal {
 
   private showImageMissing(thumbWrapper: HTMLElement, ext?: string): void {
     thumbWrapper.removeClass('is-loading')
+    thumbWrapper.addClass('is-missing')
+    thumbWrapper.setAttr('aria-label', 'No preview')
     thumbWrapper.empty()
     setIcon(thumbWrapper.createSpan({ cls: 'eagle-picker-missing' }), 'image-off')
     this.appendExtBadge(thumbWrapper, ext)
