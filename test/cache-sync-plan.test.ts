@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import EagleApiError, { EagleNotFoundError, EagleUnreachableError } from '../src/domain/EagleApiError'
-import { contentFingerprint, legacyMigrationComplete, marksChecked, outcomeForError, planCacheSync, shouldReportProgress } from '../src/utils/cache-sync-plan'
+import { ERROR_RETRY_MS, UPLOAD_RETRY_MS, contentFingerprint, isSameLibrary, legacyMigrationComplete, marksChecked, outcomeForError, planCacheSync, retryPlan, shouldReportProgress } from '../src/utils/cache-sync-plan'
 import { findEagleWikilinkTokens } from '../src/utils/markdown-image'
 
 const tokens = (md: string) => findEagleWikilinkTokens(md, 'eagle-cache')
@@ -34,11 +34,25 @@ describe('item outcomes', () => {
     expect(outcomeForError(new Error('EACCES'))).toBe('failed')
   })
 
-  it('leaves unreachable and uploading items unchecked, so they are retried', () => {
-    expect(marksChecked('unreachable')).toBe(false)
-    expect(marksChecked('uploading')).toBe(false)
-    expect(marksChecked('error')).toBe(false)
-    for (const outcome of ['present', 'cached', 'skipped', 'missing', 'failed'] as const) expect(marksChecked(outcome)).toBe(true)
+  it('leaves outcomes a retry could change unchecked', () => {
+    for (const outcome of ['unreachable', 'uploading', 'error', 'failed'] as const) expect(marksChecked(outcome)).toBe(false)
+    for (const outcome of ['present', 'cached', 'skipped', 'missing'] as const) expect(marksChecked(outcome)).toBe(true)
+  })
+
+  it('trusts a not-found only from the library the cache came from', () => {
+    expect(isSameLibrary('/lib/A.library', '/lib/A.library')).toBe(true)
+    expect(isSameLibrary('/lib/A.library', '/lib/B.library')).toBe(false)
+    expect(isSameLibrary('', '/lib/A.library')).toBe(false)
+    expect(isSameLibrary('/lib/A.library', null)).toBe(false)
+  })
+})
+
+describe(retryPlan, () => {
+  it('retries once Eagle is due back, after an error has had time to clear, and soon while uploading', () => {
+    expect(retryPlan(['cached', 'unreachable', 'error'], 12_000)).toEqual({ delayMs: 12_100, repeat: false })
+    expect(retryPlan(['error', 'uploading'], 0)).toEqual({ delayMs: ERROR_RETRY_MS, repeat: false })
+    expect(retryPlan(['uploading'], 0)).toEqual({ delayMs: UPLOAD_RETRY_MS, repeat: true })
+    expect(retryPlan(['present', 'failed', 'missing'], 0)).toBeNull()
   })
 })
 

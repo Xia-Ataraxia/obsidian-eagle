@@ -18,6 +18,8 @@ export interface EaglePluginSettings {
   uploadItemNameTemplate: string
   /** Set once the legacy `{itemId}.{ext}` filename migration was attempted, so startup stops rescanning the vault for it. */
   legacyCacheNamesMigrated: boolean
+  /** Eagle library the cache was first filled from; a not-found from any other library never evicts. */
+  cacheLibraryPath: string
   plugin_notices?: { muted: Record<string, boolean> }
 }
 
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: EaglePluginSettings = {
   searchDebounceMs: 300,
   uploadItemNameTemplate: '{uuid}_{noteName}',
   legacyCacheNamesMigrated: false,
+  cacheLibraryPath: '',
 }
 
 export function settingsFromSavedData(raw: unknown): EaglePluginSettings {

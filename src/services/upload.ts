@@ -53,7 +53,9 @@ export class UploadService {
   private async whileInFlight<T>(itemId: string, write: () => Promise<T>): Promise<T> {
     this.inFlightItemIds.add(itemId)
     try {
-      return await write()
+      const result = await write()
+      void this.plugin.cacheSync.rememberLibrary()
+      return result
     } finally {
       this.inFlightItemIds.delete(itemId)
     }

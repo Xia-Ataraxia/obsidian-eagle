@@ -100,6 +100,8 @@ export default class EaglePlugin extends Plugin {
   private readonly fileOpenSync = debounce((file: TFile) => void this.cacheSync.syncNote(file, true), 500, true)
   // Per note, so typing or a burst of saves syncs once after the edits settle.
   private readonly changeSyncs = new Map<string, Debouncer<[TFile], void>>()
+  // Paths of notes open in any tab; rebuilt lazily after the layout changes.
+  private openPaths: Set<string> | null = null
 
   private customPasteEventCallback = (e: ClipboardEvent) => {
     if (e.clipboardData) this.uploads.handleImageFiles(e.clipboardData.files, e)
@@ -164,13 +166,13 @@ export default class EaglePlugin extends Plugin {
     notices?.unload()
     this.fileOpenSync.cancel()
     for (const sync of this.changeSyncs.values()) sync.cancel()
-    this.cacheSync.dispose()
   }
 
   private async initPlugin() {
     const raw = (await this.loadData()) as Record<string, unknown> | null
     this.loadSettings(raw)
     this.notices = new PluginNotices(this, EAGLE_NOTICE_CATALOG, 'Eagle')
+    this.register(() => this.cacheSync.dispose())
     const settingTab = new EaglePluginSettingsTab(this.app, this)
     this.addSettingTab(settingTab)
     this.notices.onMutedChange = () => settingTab.update()
@@ -191,8 +193,9 @@ export default class EaglePlugin extends Plugin {
       this.registerEvent(
         this.app.metadataCache.on('changed', (file, content) => {
           // Bulk external changes (git pull, sync) must not queue Eagle calls for notes nobody is viewing.
-          if (file.extension !== 'md' || this.cacheSync.isOwnWrite(file.path, content) || !this.openNotePaths().has(file.path)) return
-          this.changeSyncFor(file.path)(file)
+          if (file.extension !== 'md' || this.cacheSync.isOwnWrite(file.path, content)) return
+          this.cacheSync.noteChanged(file.path)
+          if (this.openNotePaths().has(file.path)) this.changeSyncFor(file.path)(file)
         }),
       )
     })
@@ -208,6 +211,7 @@ export default class EaglePlugin extends Plugin {
     this.registerEditorExtension(uploadPlaceholderExtension)
     this.registerEvent(
       this.app.workspace.on('active-leaf-change', (leaf) => {
+        this.openPaths = null
         const view = leaf?.view
         if (!view) return
 
@@ -216,22 +220,29 @@ export default class EaglePlugin extends Plugin {
         }
       }),
     )
+    this.registerEvent(this.app.workspace.on('layout-change', () => (this.openPaths = null)))
     this.registerEvent(this.app.workspace.on('file-open', (file) => {
+      this.openPaths = null
       if (file?.extension === 'md') this.fileOpenSync(file)
     }))
     this.registerEvent(this.app.vault.on('delete', (file) => this.dropChangeSync(file.path)))
-    this.registerEvent(this.app.vault.on('rename', (_file, oldPath) => this.dropChangeSync(oldPath)))
+    this.registerEvent(this.app.vault.on('rename', (_file, oldPath) => {
+      this.openPaths = null
+      this.dropChangeSync(oldPath)
+    }))
 
     this.registerEvent(this.app.workspace.on('editor-menu', this.eaglePluginRightClickHandler))
   }
 
   private openNotePaths(): Set<string> {
+    if (this.openPaths) return this.openPaths
     const paths = new Set<string>()
     // Deferred tabs have no view yet, so read the path from the view state.
     this.app.workspace.iterateAllLeaves((leaf) => {
       const path = leaf.getViewState().state?.['file']
       if (typeof path === 'string' && path.endsWith('.md')) paths.add(path)
     })
+    this.openPaths = paths
     return paths
   }
 
