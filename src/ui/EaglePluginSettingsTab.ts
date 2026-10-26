@@ -183,6 +183,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   }
 
   private renderConnectionTest(setting: Setting): void {
+    setting.settingEl.addClass('eagle-wrap-controls')
     this.statusBadge = setting.controlEl.createSpan({ cls: 'eagle-connection-status' })
     if (this.connected === null) this.showChecking()
     else this.updateConnectionBadge(this.connected)
@@ -206,6 +207,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   }
 
   private renderEagleFolderName(setting: Setting): void {
+    setting.settingEl.addClass('eagle-wrap-controls')
     setting.addText((text) =>
       text
         .setPlaceholder('Obsidian')
@@ -267,6 +269,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   }
 
   private renderCacheStatus(setting: Setting): void {
+    setting.settingEl.addClass('eagle-wrap-controls')
     const refresh = async () => {
       const stats = await this.plugin.cacheManager.getCacheStats()
       setting.setDesc(`${stats.fileCount} files, ${formatBytes(stats.totalSizeBytes)}`)

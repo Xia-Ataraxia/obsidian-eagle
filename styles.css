@@ -250,6 +250,16 @@
   width: 11em;
 }
 
+/* Badge + button, button pairs and long folder names would otherwise overflow narrow windows. */
+.eagle-wrap-controls .setting-item-control {
+  flex-wrap: wrap;
+  row-gap: var(--size-4-2);
+}
+
+.eagle-wrap-controls select.dropdown {
+  max-width: 100%;
+}
+
 .eagle-connection-status {
   display: inline-flex;
   align-items: center;
