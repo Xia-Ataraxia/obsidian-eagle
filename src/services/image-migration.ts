@@ -103,20 +103,24 @@ export class ImageMigrationService {
 
     // Phase 4: Update vault files atomically, re-reading tokens from the content being written
     let migratedCount = 0
+    const rewritten: TFile[] = []
     for (const file of filesWithOldFormat) {
-      migratedCount += await rewriteNote(this.plugin.app.vault, file, (content) =>
+      const count = await rewriteNote(this.plugin.app.vault, file, (content) =>
         findOldFormatTokens(content).flatMap(({ token, itemId }) => {
           const ext = successExt.get(itemId)
           return ext ? [{ start: token.start, end: token.end, text: wikilinkForCacheItem(cacheFolderName, itemId, ext) }] : []
         }),
       )
+      migratedCount += count
+      if (count > 0) rewritten.push(file)
       tick('Updating notes…')
     }
 
     if (migratedCount > 0) {
-      // Migrated links carry no display name yet; the rewrite re-fires metadata changes, which run the rename.
+      // Migrated links carry no display name yet; syncing each rewritten note renames them.
       this.plugin.settings.legacyCacheNamesMigrated = false
       await this.plugin.saveSettings()
+      for (const file of rewritten) void this.plugin.cacheSync.syncNote(file)
     }
 
     let failureSuffix = ''

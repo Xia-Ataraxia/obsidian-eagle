@@ -395,8 +395,8 @@ export default class EagleUploader {
   }
 
   /**
-   * Returns the display name of the Eagle item, or `null` if it cannot be resolved
-   * (Eagle unreachable, item missing, or name field absent).
+   * Returns the display name of the Eagle item, or `null` if Eagle has no such item or name.
+   * Throws `EagleUnreachableError` when Eagle doesn't answer, so callers can retry later.
    */
   async getItemName(itemId: string): Promise<string | null> {
     try {
@@ -404,7 +404,8 @@ export default class EagleUploader {
       const url = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.ITEM_INFO}?id=${itemId}`
       const data = parseItemInfoResponse(await this.requestJson(url, 'GET'))
       return (data.status === 'success' && data.data?.name) ? data.data.name : null
-    } catch {
+    } catch (err) {
+      if (err instanceof EagleUnreachableError) throw err
       return null
     }
   }

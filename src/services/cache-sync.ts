@@ -4,180 +4,212 @@ import type EaglePlugin from '../main'
 
 import EagleApiError from '../domain/EagleApiError'
 import { wikilinkForCacheItem } from '../utils/eagle-path-contract'
-import { planCacheSync } from '../utils/cache-sync-plan'
+import { legacyMigrationComplete, marksChecked, outcomeForError, planCacheSync, shouldReportProgress, type ItemOutcome } from '../utils/cache-sync-plan'
 import { countLabel } from '../utils/plural'
 import { findEagleWikilinkTokens, type WikilinkEmbedToken } from '../utils/markdown-image'
 import { fileUrlToOsPath } from '../ui/file-url'
 import { rewriteNote } from '../ui/obsidian-vault'
 
+const UNREACHABLE_BACKOFF_MS = 30_000
+
+interface Tally {
+  /** Latest outcome per item, so an item linked from many notes counts once. */
+  outcomes: Map<string, ItemOutcome>
+  /** Outcomes of legacy links left as they were; decides whether the vault counts as migrated. */
+  legacy: ItemOutcome[]
+}
+
+const newTally = (): Tally => ({ outcomes: new Map(), legacy: [] })
+
 export class CacheSyncService {
   constructor(private readonly plugin: EaglePlugin) {}
-
-  /**
-   * One-time migration: renames existing `{itemId}.{ext}` cache files to
-   * `{displayName}_{itemId}.{ext}` and updates all wikilinks in the vault.
-   * Requires Eagle to be running — silently skips items it cannot resolve.
-   */
-  async migrateCacheFilesToReadableNames(): Promise<void> {
-    const cacheFolder = this.plugin.cacheManager.cacheFolder
-    const adapter = this.plugin.app.vault.adapter
-
-    // Collect all old-format tokens (stem has no underscore before the itemId).
-    // New-format tokens already have displayName set, so we skip them.
-    const tokensByFile = new Map<string, { file: TFile; tokens: WikilinkEmbedToken[] }>()
-
-    await Promise.all(
-      this.plugin.app.vault.getMarkdownFiles().map(async (file) => {
-        const content = await this.plugin.app.vault.read(file)
-        const oldTokens = findEagleWikilinkTokens(content, cacheFolder).filter((t) => t.displayName === undefined)
-        if (oldTokens.length > 0) tokensByFile.set(file.path, { file, tokens: oldTokens })
-      }),
-    )
-
-    if (tokensByFile.size === 0) return
-
-    // Fetch display names from Eagle for each unique itemId.
-    const uniqueIds = new Set<string>()
-    for (const { tokens } of tokensByFile.values()) {
-      for (const t of tokens) uniqueIds.add(t.itemId)
-    }
-
-    const nameMap = new Map<string, string>() // itemId → displayName
-    await Promise.allSettled(
-      Array.from(uniqueIds).map(async (itemId) => {
-        const name = await this.plugin.eagleUploader.getItemName(itemId)
-        if (name) nameMap.set(itemId, name)
-      }),
-    )
-
-    if (nameMap.size === 0) return
-
-    // Rename cache files on disk and collect wikilink replacements.
-    const renamedIds = new Set<string>()
-    await Promise.allSettled(
-      Array.from(nameMap.entries()).map(async ([itemId, displayName]) => {
-        // Find which ext this item uses by scanning the tokens we already have.
-        let ext: string | undefined
-        for (const { tokens } of tokensByFile.values()) {
-          const match = tokens.find((t) => t.itemId === itemId)
-          if (match) { ext = match.ext; break }
-        }
-        if (!ext) return
-
-        const oldPath = this.plugin.cacheManager.cachedVaultPath(itemId, ext)
-        const newPath = this.plugin.cacheManager.cachedVaultPath(itemId, ext, displayName)
-        if (oldPath === newPath) return
-
-        try {
-          // Links are rewritten only when the target really exists under its new name.
-          if (await adapter.exists(oldPath)) await adapter.rename(oldPath, newPath)
-          if (await adapter.exists(newPath)) renamedIds.add(itemId)
-        } catch {
-          this.plugin.log.warn('cache migration rename failed', { itemId })
-        }
-      }),
-    )
-
-    if (renamedIds.size === 0) return
-
-    // Update wikilinks atomically; tokens are re-read from the content being written.
-    await Promise.allSettled(
-      Array.from(tokensByFile.values()).map(({ file }) =>
-        rewriteNote(this.plugin.app.vault, file, (content) =>
-          findEagleWikilinkTokens(content, cacheFolder)
-            .filter((t) => t.displayName === undefined && renamedIds.has(t.itemId))
-            .map((t) => ({ start: t.start, end: t.end, text: wikilinkForCacheItem(cacheFolder, t.itemId, t.ext, nameMap.get(t.itemId) ?? '', t.alias) })),
-        ),
-      ),
-    )
-  }
 
   private readonly checkedItems = new Set<string>()
   // Note syncs run one at a time so a bulk external sync can't flood the Eagle API.
   private queue: Promise<void> = Promise.resolve()
+  // While Eagle is down, syncs make no API calls until this passes, so typing stays free.
+  private eagleUnreachableUntil = 0
 
   private enqueue(task: () => Promise<void>): Promise<void> {
     this.queue = this.queue.then(task).catch((err) => this.plugin.log.error('cache sync failed unexpectedly', err))
     return this.queue
   }
 
-  /**
-   * Per-note backfill, fed by metadataCache 'changed' and open tabs, so no vault scan runs at launch.
-   * Each item is checked once per session; file-open runs the full check via syncCacheForFile.
-   */
-  syncNoteContent(content: string): Promise<void> {
+  private isBackingOff(): boolean {
+    return Date.now() < this.eagleUnreachableUntil
+  }
+
+  /** Backfills one open note's cache links; `content` skips the read when the caller already has it. */
+  syncNote(file: TFile, content?: string): Promise<void> {
     return this.enqueue(async () => {
-      await this.syncNote(content)
+      await this.syncNoteNow(file, content ?? (await this.plugin.app.vault.cachedRead(file)), newTally())
     })
   }
 
-  /** Explicit command: re-checks every note's links, with progress. */
-  syncAllNotes(): Promise<void> {
-    const { notices } = this.plugin
+  /** file-open: backfill like any open note, then evict items deleted from Eagle. */
+  syncOpenedFile(file: TFile): Promise<void> {
     return this.enqueue(async () => {
-      this.checkedItems.clear()
+      await this.syncNoteNow(file, await this.plugin.app.vault.read(file), newTally())
+      if (!this.isBackingOff()) await this.syncCacheForFile(file)
+    })
+  }
+
+  /** Explicit command: re-checks every note's links and finishes the vault-wide legacy rename, with progress. */
+  syncAllNotes(): Promise<void> {
+    const { notices, log } = this.plugin
+    // A fresh session starts at invocation, so syncs already queued behind the command re-check too.
+    this.checkedItems.clear()
+    this.eagleUnreachableUntil = 0
+    return this.enqueue(async () => {
       const files = this.plugin.app.vault.getMarkdownFiles()
-      let cached = 0
-      let failed = 0
-      notices.show('cache_sync_progress', { step: 'Checking notes for images…' }, { progress: { done: 0, total: files.length } })
+      const tally = newTally()
+      let unreadable = 0
+      let lastReportAt = 0
+      const report = (done: number) => notices.show('cache_sync_progress', { step: 'Checking notes for images…' }, { progress: { done, total: files.length } })
+      report(0)
       try {
         for (const [i, file] of files.entries()) {
-          const result = await this.syncNote(await this.plugin.app.vault.cachedRead(file))
-          cached += result.cached
-          failed += result.failed
-          notices.show('cache_sync_progress', { step: 'Checking notes for images…' }, { progress: { done: i + 1, total: files.length } })
+          try {
+            await this.syncNoteNow(file, await this.plugin.app.vault.cachedRead(file), tally)
+          } catch (err) {
+            unreadable++
+            log.warn('cache sync skipped a note', { path: file.path, err })
+          }
+          const now = Date.now()
+          if (shouldReportProgress(i + 1, files.length, lastReportAt, now)) {
+            report(i + 1)
+            lastReportAt = now
+          }
+        }
+        if (!this.plugin.settings.legacyCacheNamesMigrated && unreadable === 0 && legacyMigrationComplete(tally.legacy)) {
+          this.plugin.settings.legacyCacheNamesMigrated = true
+          await this.plugin.saveSettings()
         }
       } finally {
         notices.remove('cache_sync_progress')
+        this.showSummary(tally, unreadable)
       }
-      if (cached === 0 && failed === 0) {
-        notices.show('cache_sync_current')
-        return
-      }
-      const failureSuffix = failed > 0 ? ` ${countLabel(failed, 'image')} couldn't be fetched. Make sure Eagle is open.` : ''
-      notices.show('cache_sync_done', { images: countLabel(cached, 'image'), failureSuffix })
     })
   }
 
-  private async syncNote(content: string): Promise<{ cached: number; failed: number }> {
-    const tokens = findEagleWikilinkTokens(content, this.plugin.cacheManager.cacheFolder)
-    if (tokens.length === 0) return { cached: 0, failed: 0 }
-    const { items, migrate } = planCacheSync(tokens, this.checkedItems, this.plugin.settings.legacyCacheNamesMigrated)
-    if (migrate) await this.migrateLegacyNames()
+  private showSummary({ outcomes }: Tally, unreadable: number): void {
+    const counts = { cached: 0, unreachable: 0, failed: 0 }
+    for (const outcome of outcomes.values()) if (outcome in counts) counts[outcome as keyof typeof counts]++
+    const failures = [
+      counts.unreachable > 0 ? `${countLabel(counts.unreachable, 'image')} couldn't be fetched. Make sure Eagle is open.` : '',
+      counts.failed > 0 ? `${countLabel(counts.failed, 'image')} couldn't be copied.` : '',
+      unreadable > 0 ? `${countLabel(unreadable, 'note')} couldn't be read.` : '',
+    ].filter(Boolean)
+    if (counts.cached === 0 && failures.length === 0) {
+      this.plugin.notices.show('cache_sync_current')
+      return
+    }
+    this.plugin.notices.show('cache_sync_done', { images: countLabel(counts.cached, 'image'), failureSuffix: failures.map((f) => ` ${f}`).join('') })
+  }
 
-    let cached = 0
-    let failed = 0
-    await Promise.allSettled(
-      items.map(async ({ itemId, ext, displayName }) => {
+  private settle(itemId: string, outcome: ItemOutcome, tally: Tally): void {
+    tally.outcomes.set(itemId, outcome)
+    if (marksChecked(outcome)) this.checkedItems.add(itemId)
+  }
+
+  /** Only a real failed call starts the window; skips during it don't extend it. */
+  private classify(err: unknown): ItemOutcome {
+    const outcome = outcomeForError(err)
+    if (outcome === 'unreachable') this.eagleUnreachableUntil = Date.now() + UNREACHABLE_BACKOFF_MS
+    return outcome
+  }
+
+  private plan(content: string) {
+    const tokens = findEagleWikilinkTokens(content, this.plugin.cacheManager.cacheFolder)
+    return planCacheSync(tokens, this.checkedItems, this.plugin.settings.legacyCacheNamesMigrated)
+  }
+
+  private async syncNoteNow(file: TFile, content: string, tally: Tally): Promise<void> {
+    let { items, legacy } = this.plan(content)
+    if (legacy.length > 0) {
+      const leftInPlace = this.isBackingOff()
+        ? new Map(legacy.map((t): [string, ItemOutcome] => [t.itemId, 'unreachable']))
+        : await this.renameLegacyLinks(file, legacy)
+      for (const [itemId, outcome] of leftInPlace) {
+        tally.legacy.push(outcome)
+        this.settle(itemId, outcome, tally)
+      }
+      // Renamed links are named now; re-plan from the rewritten note so they get backfilled too.
+      if (leftInPlace.size < legacy.length) items = this.plan(await this.plugin.app.vault.read(file)).items
+    }
+
+    await Promise.all(items.map(async (token) => this.settle(token.itemId, await this.backfill(token), tally)))
+  }
+
+  private async backfill({ itemId, ext, displayName }: WikilinkEmbedToken): Promise<ItemOutcome> {
+    const { cacheManager, eagleUploader } = this.plugin
+    try {
+      if (await cacheManager.isCached(itemId, ext, displayName)) return 'present'
+      if (this.isBackingOff()) return 'unreachable'
+      const fileUrl = await eagleUploader.getFileUrlForItemId(itemId)
+      if (!fileUrl.startsWith('file://')) return 'skipped'
+      await cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName)
+      return 'cached'
+    } catch (err) {
+      const outcome = this.classify(err)
+      if (outcome === 'failed') this.plugin.log.error('unexpected error during cache sync', err)
+      return outcome
+    }
+  }
+
+  /**
+   * Renames this note's `{itemId}.{ext}` cache files to `{displayName}_{itemId}.{ext}` and rewrites
+   * the links in every note embedding them. Returns the outcome of each link left as it was.
+   */
+  private async renameLegacyLinks(file: TFile, legacy: WikilinkEmbedToken[]): Promise<Map<string, ItemOutcome>> {
+    const { app, cacheManager, eagleUploader, log } = this.plugin
+    const leftInPlace = new Map<string, ItemOutcome>()
+    const names = new Map<string, string>()
+    const notes = new Set([file.path])
+
+    await Promise.all(
+      legacy.map(async ({ itemId, ext }) => {
         try {
-          if (await this.plugin.cacheManager.isCached(itemId, ext, displayName)) return
-          const fileUrl = await this.plugin.eagleUploader.getFileUrlForItemId(itemId)
-          if (!fileUrl.startsWith('file://')) return
-          await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName)
-          cached++
+          const name = await eagleUploader.getItemName(itemId)
+          if (!name) {
+            leftInPlace.set(itemId, 'missing')
+            return
+          }
+          const oldPath = cacheManager.cachedVaultPath(itemId, ext)
+          // Other notes embedding the same file come from the link index, not a vault read.
+          for (const [source, targets] of Object.entries(app.metadataCache.resolvedLinks)) {
+            if (oldPath in targets) notes.add(source)
+          }
+          const newPath = cacheManager.cachedVaultPath(itemId, ext, name)
+          const { adapter } = app.vault
+          // The link is renamed even with no file to move; the backfill then fetches it under the new name.
+          if (!(await adapter.exists(newPath)) && (await adapter.exists(oldPath))) await adapter.rename(oldPath, newPath)
+          names.set(itemId, name)
         } catch (err) {
-          // The item stays checked: an offline Eagle isn't re-queried while the user types; file-open and the command retry.
-          failed++
-          if (err instanceof EagleApiError) return
-          this.plugin.log.error('unexpected error during cache sync', err)
+          const outcome = this.classify(err)
+          if (outcome === 'failed') log.warn('cache migration rename failed', { itemId, err })
+          leftInPlace.set(itemId, outcome)
         }
       }),
     )
-    return { cached, failed }
+    if (names.size === 0) return leftInPlace
+
+    const cacheFolder = cacheManager.cacheFolder
+    const results = await Promise.allSettled(
+      Array.from(notes, (path) => app.vault.getFileByPath(path)).map(async (note) => {
+        if (!note) return
+        await rewriteNote(app.vault, note, (content) =>
+          findEagleWikilinkTokens(content, cacheFolder)
+            .filter((t) => t.displayName === undefined && names.has(t.itemId))
+            .map((t) => ({ start: t.start, end: t.end, text: wikilinkForCacheItem(cacheFolder, t.itemId, t.ext, names.get(t.itemId) ?? '', t.alias) })),
+        )
+      }),
+    )
+    for (const result of results) if (result.status === 'rejected') log.error('cache migration link rewrite failed', result.reason)
+    return leftInPlace
   }
 
-  /** Attempted once per vault, when the first note with legacy links shows up; the rewrite re-fires 'changed'. */
-  private async migrateLegacyNames(): Promise<void> {
-    try {
-      await this.migrateCacheFilesToReadableNames()
-    } catch (err) {
-      this.plugin.log.error('cache filename migration failed', err)
-    }
-    this.plugin.settings.legacyCacheNamesMigrated = true
-    await this.plugin.saveSettings()
-  }
-
-  async syncCacheForFile(file: TFile): Promise<void> {
+  private async syncCacheForFile(file: TFile): Promise<void> {
     const content = await this.plugin.app.vault.read(file)
     const tokens = findEagleWikilinkTokens(content, this.plugin.cacheManager.cacheFolder)
     if (tokens.length === 0) return
@@ -187,7 +219,11 @@ export class CacheSyncService {
         const isCached = await this.plugin.cacheManager.isCached(itemId, ext, displayName)
         const exists = await this.plugin.eagleUploader.itemExists(itemId)
 
-        if (exists === null) return // Eagle unreachable or error — skip to avoid data loss
+        if (exists === null) {
+          // Eagle unreachable or error: skip to avoid data loss, and back off like the backfill does.
+          this.eagleUnreachableUntil = Date.now() + UNREACHABLE_BACKOFF_MS
+          return
+        }
 
         if (exists === false && isCached) {
           // Item confirmed deleted from Eagle — evict from cache

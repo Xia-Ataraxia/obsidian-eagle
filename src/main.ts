@@ -94,20 +94,14 @@ export default class EaglePlugin extends Plugin {
   private readonly dataFile = new SerializedDataFile(this)
   private readonly uploads = new UploadService(this)
   readonly uploadProgress = new UploadProgress(() => this.notices)
-  private readonly cacheSync = new CacheSyncService(this)
+  readonly cacheSync = new CacheSyncService(this)
   private readonly imageMigration = new ImageMigrationService(this)
-  private _lastSyncedFilePath: string | null = null
   private _pendingSyncFile: TFile | null = null
   private readonly syncDebounce = new DebounceController({
     delayMs: 500,
     onRun: async () => {
       const file = this._pendingSyncFile
-      if (!file) return
-      if (file.path === this._lastSyncedFilePath) return
-      this._lastSyncedFilePath = file.path
-      await this.cacheSync.syncCacheForFile(file).catch((err) => {
-        this.log.error('syncCacheForFile failed', err)
-      })
+      if (file) await this.cacheSync.syncOpenedFile(file)
     },
   })
 
@@ -199,8 +193,9 @@ export default class EaglePlugin extends Plugin {
       this.syncOpenNotes()
       this.registerEvent(
         this.app.metadataCache.on('changed', (file, content) => {
-          if (file.extension !== 'md') return
-          void this.cacheSync.syncNoteContent(content)
+          // Bulk external changes (git pull, sync) must not queue Eagle calls for notes nobody is viewing.
+          if (file.extension !== 'md' || !this.openNotePaths().has(file.path)) return
+          void this.cacheSync.syncNote(file, content)
         }),
       )
     })
@@ -229,18 +224,20 @@ export default class EaglePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('editor-menu', this.eaglePluginRightClickHandler))
   }
 
-  private syncOpenNotes() {
-    const files = new Set<TFile>()
+  private openNotePaths(): Set<string> {
+    const paths = new Set<string>()
     // Deferred tabs have no view yet, so read the path from the view state.
     this.app.workspace.iterateAllLeaves((leaf) => {
       const path = leaf.getViewState().state?.['file']
-      const file = typeof path === 'string' ? this.app.vault.getFileByPath(path) : null
-      if (file?.extension === 'md') files.add(file)
+      if (typeof path === 'string' && path.endsWith('.md')) paths.add(path)
     })
-    for (const file of files) {
-      void this.app.vault.cachedRead(file).then((content) => this.cacheSync.syncNoteContent(content)).catch((err: unknown) => {
-        this.log.warn('failed to read open note for cache sync', { path: file.path, err })
-      })
+    return paths
+  }
+
+  private syncOpenNotes() {
+    for (const path of this.openNotePaths()) {
+      const file = this.app.vault.getFileByPath(path)
+      if (file) void this.cacheSync.syncNote(file)
     }
   }
 
