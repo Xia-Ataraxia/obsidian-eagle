@@ -17,6 +17,7 @@ import { resolveDestinationPreview, sanitizeFolderMappings } from '../domain/fol
 import { EagleUnreachableError } from '../domain/EagleApiError'
 import { ObsidianEagleFolderMapping } from '../domain/settings'
 import { countLabel } from '../utils/plural'
+import { DebounceController } from '../utils/debounce-controller'
 import { PluginLogger } from '../utils/plugin-logger'
 import EagleCacheManager from './EagleCacheManager'
 import { EagleFolderWithPath } from './EagleUploader'
@@ -45,7 +46,20 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   private previewDescEl: HTMLElement | null = null
   private statusBadge: HTMLElement | null = null
   private connected: boolean | null = null
+  private connectionCheckId = 0
   private foldersPromise: Promise<EagleFolderList> | null = null
+  private readonly recheckConnection = new DebounceController({
+    delayMs: 600,
+    // Not awaited: a hung check must not block the next one; only the newest result updates the badge.
+    onRun: () => {
+      this.foldersPromise = null
+      const check = ++this.connectionCheckId
+      void this.plugin.eagleUploader.isConnected().then((ok) => {
+        if (check === this.connectionCheckId) this.updateConnectionBadge(ok)
+      })
+      return Promise.resolve()
+    },
+  })
 
   constructor(app: App, plugin: EaglePlugin) {
     super(app, plugin)
@@ -61,6 +75,12 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     this.plugin.settings[key] = value
     await this.plugin.saveSettings()
     if (key === 'eagleFolderName') this.updatePreviewDesc()
+    if (key === 'eagleHost' || key === 'eaglePort') {
+      this.connectionCheckId++
+      this.statusBadge?.removeClasses(['is-connected', 'is-disconnected'])
+      this.statusBadge?.setText('○ checking…')
+      this.recheckConnection.markDirty()
+    }
   }
 
   override getSettingDefinitions(): SettingDefinitionItem[] {
@@ -387,6 +407,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   }
 
   override hide() {
+    this.recheckConnection.dispose()
     this.foldersPromise = null
     this.statusBadge = null
     this.connected = null

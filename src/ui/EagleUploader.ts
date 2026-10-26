@@ -7,6 +7,7 @@ import type { NodeDataAdapter, NodeErrnoException } from '../types/obsidian'
 import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { EaglePluginSettings } from '../domain/settings'
 import { type EagleFolderTreeNode, extractResponseMessage, extractSearchItemsData, extractTextMessage, extractThumbnailCandidate, flattenFolderTree, normalizeRequestError, parseCreateFolderResponse, parseFolderList, parseFolderListResponse, parseItemInfoResponse, parseLibraryInfoResponse, parseSearchItemsResponse, parseStringDataResponse } from '../utils/eagle-response-parsers'
+import { withTimeout } from '../utils/with-timeout'
 import { raceAbort } from '../utils/race-abort'
 import { PluginLogger } from '../utils/plugin-logger'
 import { safeDisplayName, safeImageExtension } from '../utils/eagle-path-contract'
@@ -41,6 +42,7 @@ const EAGLE_API_ENDPOINTS = {
   LIBRARY_INFO: '/api/library/info',
 } as const
 
+const CONNECTION_TIMEOUT_MS = 3000
 const EAGLE_PROCESSING_DELAY_MS = 300
 const EAGLE_URL_PROTOCOL = 'eagle://item/'
 
@@ -383,8 +385,7 @@ export default class EagleUploader {
 
   async isConnected(): Promise<boolean> {
     try {
-      await this.getLibraryRootPath()
-      return true
+      return await withTimeout(this.getLibraryRootPath().then(() => true), CONNECTION_TIMEOUT_MS, false)
     } catch (err) {
        
       this.log.debug('isConnected check failed', { err: String(err) })
