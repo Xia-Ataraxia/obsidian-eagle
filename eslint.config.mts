@@ -5,7 +5,7 @@ import { globalIgnores } from 'eslint/config';
 
 let vitestPlugin = null;
 try {
-	const imported = await import('eslint-plugin-vitest');
+	const imported = await import('@vitest/eslint-plugin');
 	vitestPlugin = imported.default ?? imported;
 } catch {
 	vitestPlugin = null;
