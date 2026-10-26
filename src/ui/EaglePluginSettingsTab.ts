@@ -140,7 +140,6 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     const muted = notices.listMuted()
     const unmute = async (ids: string[]) => {
       for (const id of ids) await notices.unmute(id)
-      this.update()
     }
     const items: SettingGroupItem[] = muted.length
       ? muted.map((id) => ({
@@ -154,7 +153,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
       items.push({
         name: 'Unmute all',
         render: (setting: Setting) => {
-          setting.addButton((btn) => btn.setButtonText('Unmute all').onClick(() => unmute(muted)))
+          setting.addButton((btn) => btn.setButtonText('Unmute all').onClick(() => notices.unmuteAll()))
         },
       })
     }

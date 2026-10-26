@@ -66,10 +66,14 @@ export class PluginNotices {
 		}
 	}
 
+	/** Fired after the muted set changes so open settings can refresh. */
+	onMutedChange?: () => void;
+
 	async mute(id: string): Promise<void> {
 		const store = this.getMutedStore();
 		store[id] = true;
 		await this.plugin.saveSettings();
+		this.onMutedChange?.();
 	}
 
 	async unmute(id: string): Promise<void> {
@@ -77,6 +81,7 @@ export class PluginNotices {
 		if (store[id]) {
 			delete store[id];
 			await this.plugin.saveSettings();
+			this.onMutedChange?.();
 		}
 	}
 
@@ -85,6 +90,7 @@ export class PluginNotices {
 		if (Object.keys(store).length === 0) return;
 		this.getPluginNoticesSettings().muted = {};
 		await this.plugin.saveSettings();
+		this.onMutedChange?.();
 	}
 
 	isMuted(id: string): boolean {

@@ -166,7 +166,9 @@ export default class EaglePlugin extends Plugin {
     const raw = (await this.loadData()) as Record<string, unknown> | null
     this.loadSettings(raw)
     this.notices = new PluginNotices(this, EAGLE_NOTICE_CATALOG, 'Eagle')
-    this.addSettingTab(new EaglePluginSettingsTab(this.app, this))
+    const settingTab = new EaglePluginSettingsTab(this.app, this)
+    this.addSettingTab(settingTab)
+    this.notices.onMutedChange = () => settingTab.update()
 
     this.setupEagleUploader()
     this._cacheManager = new EagleCacheManager(this.app, this.settings.cacheFolderName)
