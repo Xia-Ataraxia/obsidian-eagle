@@ -132,6 +132,10 @@ export default class EaglePlugin extends Plugin {
     this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
   }
 
+  saveImageLocally(file: File): Promise<string> {
+    return this.uploads.saveAsLocalAttachment(file)
+  }
+
   async saveSettings(): Promise<void> {
     this.settings.folderMappings = sanitizeFolderMappings(this.settings.folderMappings ?? [])
     this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
