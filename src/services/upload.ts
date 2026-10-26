@@ -23,6 +23,7 @@ import { extractFileExtension } from '../utils/image-format'
 import { resolveItemName } from '../utils/item-naming'
 import { countLabel } from '../utils/plural'
 import { generatePseudoRandomId } from '../utils/pseudo-random'
+import { uploadPlaceholderFor } from '../utils/upload-placeholder'
 
 export interface LocalImageInEditor {
   image: {
@@ -144,7 +145,7 @@ export class UploadService {
       this.plugin.notices.show('no_active_editor')
       return
     }
-    const progressText = UploadService.progressTextFor(generatePseudoRandomId())
+    const progressText = uploadPlaceholderFor(generatePseudoRandomId())
     // A placeholder after an existing link starts on its own line; a pasted one takes the cursor's place.
     const placeholder = atPos ? `\n${progressText}` : `${progressText}\n`
     if (atPos) target.view.editor.replaceRange(placeholder, atPos, atPos)
@@ -264,10 +265,6 @@ export class UploadService {
 
   private activeSourcePath(): string {
     return this.plugin.app.workspace.getActiveFile()?.path ?? ''
-  }
-
-  private static progressTextFor(id: string) {
-    return `![Uploading to Eagle...${id}]()`
   }
 
   markdownImageFor(itemId: string, ext: string, displayName?: string) {

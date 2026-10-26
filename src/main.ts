@@ -22,6 +22,7 @@ import EagleSearchPickerModal from './ui/EagleSearchPickerModal'
 import EagleUploader, { type EagleItemSearchResult } from './ui/EagleUploader'
 import { findLocalFileUnderCursor } from './ui/editor'
 import { fileUrlToDisplayUrl, fileUrlToOsPath } from './ui/file-url'
+import { uploadPlaceholderExtension } from './ui/upload-placeholder-widget'
 import { renameCache } from './services/cache-rename'
 import { CacheSyncService } from './services/cache-sync'
 import { ImageMigrationService } from './services/image-migration'
@@ -202,6 +203,7 @@ export default class EaglePlugin extends Plugin {
   private setupEagleHandlers() {
     this.registerEvent(this.app.workspace.on('editor-paste', this.customPasteEventCallback))
     this.registerEvent(this.app.workspace.on('editor-drop', this.customDropEventListener))
+    this.registerEditorExtension(uploadPlaceholderExtension)
     this.registerEvent(
       this.app.workspace.on('active-leaf-change', (leaf) => {
         const view = leaf?.view

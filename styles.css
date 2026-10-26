@@ -384,6 +384,30 @@
   animation: eagle-progress-slide 1.1s ease-in-out infinite;
 }
 
+/* ── Upload placeholder chip ────────────────────────────────────────────── */
+
+.eagle-upload-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  padding: var(--size-2-1) var(--size-4-2);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  background: linear-gradient(90deg, transparent 25%, color-mix(in srgb, var(--text-normal) 8%, transparent) 50%, transparent 75%) 0 0 / 200% 100% var(--background-modifier-hover);
+  animation: eagle-shimmer 1.6s linear infinite, eagle-fade-in 0.2s ease;
+  vertical-align: middle;
+}
+
+.eagle-upload-chip-icon {
+  display: inline-flex;
+}
+
+.eagle-upload-chip-icon svg {
+  width: var(--icon-xs);
+  height: var(--icon-xs);
+}
+
 @keyframes eagle-progress-slide {
   to { background-position: 170% 0; }
 }
@@ -442,5 +466,9 @@
 
   .eagle-notice-progress:indeterminate {
     animation-duration: 2.4s;
+  }
+
+  .eagle-upload-chip {
+    animation-duration: 3.2s, 0.2s;
   }
 }
