@@ -7,6 +7,7 @@ export interface EagleFolderWithPath {
 
 export interface EagleItemSearchOptions {
   keyword: string
+  tags?: string[]
   limit?: number
   orderBy?: string
   offset?: number

@@ -25,12 +25,6 @@
   font-size: var(--font-ui-medium);
 }
 
-.eagle-picker-search:focus {
-  outline: none;
-  border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
-}
-
 .eagle-picker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -177,14 +171,6 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.eagle-picker-empty {
-  grid-column: 1 / -1;
-  text-align: center;
-  color: var(--text-muted);
-  padding: 2rem 0;
-  margin: 0;
 }
 
 .eagle-picker-status {
