@@ -47,12 +47,21 @@ declare module 'obsidian' {
   interface Canvas {
     posCenter(): Point
     createTextNode(n: NewTextNode): unknown
+    createFileNode(n: NewFileNode): unknown
   }
 
   interface NewTextNode {
     pos: Point
+    size?: { width: number; height: number }
     position: string
     text: string
+  }
+
+  interface NewFileNode {
+    pos: Point
+    size?: { width: number; height: number }
+    position: string
+    file: TFile
   }
 
   interface ClipboardManager {
