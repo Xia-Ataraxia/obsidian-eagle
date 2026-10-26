@@ -4,9 +4,9 @@ import { App, requestUrl } from 'obsidian'
 
 import type { NodeDataAdapter, NodeErrnoException } from '../types/obsidian'
 
-import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
+import EagleApiError, { EagleNotFoundError, EagleUnreachableError } from '../domain/EagleApiError'
 import { EaglePluginSettings } from '../domain/settings'
-import { type EagleFolderTreeNode, extractResponseMessage, extractSearchItemsData, extractTextMessage, extractThumbnailCandidate, flattenFolderTree, normalizeRequestError, parseCreateFolderResponse, parseFolderList, parseFolderListResponse, parseItemInfoResponse, parseLibraryInfoResponse, parseSearchItemsResponse, parseStringDataResponse } from '../utils/eagle-response-parsers'
+import { type EagleFolderTreeNode, extractResponseMessage, extractSearchItemsData, extractTextMessage, extractThumbnailCandidate, flattenFolderTree, isNotFoundResponse, normalizeRequestError, parseCreateFolderResponse, parseFolderList, parseFolderListResponse, parseItemInfoResponse, parseLibraryInfoResponse, parseSearchItemsResponse, parseStringDataResponse } from '../utils/eagle-response-parsers'
 import { selectByTags, tagFetchLimit } from '../utils/search-query'
 import { withTimeout } from '../utils/with-timeout'
 import { raceAbort } from '../utils/race-abort'
@@ -80,6 +80,7 @@ export default class EagleUploader {
       if (signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError')
 
       if (resp.status < 200 || resp.status >= 300) {
+        if (isNotFoundResponse(resp.json)) throw new EagleNotFoundError('Eagle has no such item.')
         const responseMessage = extractResponseMessage(resp.json)
           || extractTextMessage(resp)
           || `${resp.status} Unknown Error`
@@ -395,8 +396,8 @@ export default class EagleUploader {
   }
 
   /**
-   * Returns the display name of the Eagle item, or `null` if it cannot be resolved
-   * (Eagle unreachable, item missing, or name field absent).
+   * Returns the display name of the Eagle item, or `null` if Eagle has no such item or name.
+   * Throws when Eagle doesn't answer or answers with any other error, so callers can retry later.
    */
   async getItemName(itemId: string): Promise<string | null> {
     try {
@@ -404,15 +405,16 @@ export default class EagleUploader {
       const url = `http://${eagleHost}:${eaglePort}${EAGLE_API_ENDPOINTS.ITEM_INFO}?id=${itemId}`
       const data = parseItemInfoResponse(await this.requestJson(url, 'GET'))
       return (data.status === 'success' && data.data?.name) ? data.data.name : null
-    } catch {
-      return null
+    } catch (err) {
+      if (err instanceof EagleNotFoundError) return null
+      throw err
     }
   }
 
   /**
-   * Returns `true` if the item exists and is not deleted, `false` if confirmed absent,
-   * or `null` if the check failed (Eagle unreachable, network error, server error).
-   * Callers must NOT evict cached files when this returns `null`.
+   * Returns `true` if the item exists and is not deleted, `false` if confirmed absent or trashed, or
+   * `null` if Eagle answered with any other error. Throws `EagleUnreachableError`
+   * when Eagle doesn't answer. Callers must NOT evict cached files unless this returns `false`.
    */
   async itemExists(itemId: string): Promise<boolean | null> {
     try {
@@ -421,7 +423,8 @@ export default class EagleUploader {
       const data = parseItemInfoResponse(await this.requestJson(url, 'GET'))
       return data.status === 'success' && !data.data?.isDeleted
     } catch (err) {
-       
+      if (err instanceof EagleNotFoundError) return false
+      if (err instanceof EagleUnreachableError) throw err
       this.log.debug('itemExists check failed — treating as uncertain', { itemId, err: String(err) })
       return null
     }

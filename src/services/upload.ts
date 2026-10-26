@@ -43,6 +43,24 @@ interface NoteTarget {
 export class UploadService {
   constructor(private readonly plugin: EaglePlugin) {}
 
+  // Items whose cache file this service is still writing; cache sync leaves them alone meanwhile.
+  private readonly inFlightItemIds = new Set<string>()
+
+  isUploading(itemId: string): boolean {
+    return this.inFlightItemIds.has(itemId)
+  }
+
+  private async whileInFlight<T>(itemId: string, write: () => Promise<T>): Promise<T> {
+    this.inFlightItemIds.add(itemId)
+    try {
+      const result = await write()
+      void this.plugin.cacheSync.rememberLibrary()
+      return result
+    } finally {
+      this.inFlightItemIds.delete(itemId)
+    }
+  }
+
   handleImageFiles(files: FileList, e: Event): void {
     if (!allFilesAreImages(files)) return
 
@@ -210,22 +228,23 @@ export class UploadService {
     }
 
     const { itemId, fileUrl, ext } = await this.plugin.eagleUploader.upload(normalizedFile, { folderName, signal, displayName })
+    return this.whileInFlight(itemId, async () => {
+      if (fileUrl.startsWith('file://')) {
+        await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
+          this.plugin.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
+        })
+      }
 
-    if (fileUrl.startsWith('file://')) {
-      await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
-        this.plugin.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
-      })
-    }
+      // Store hash for future deduplication (reuse pre-computed values)
+      if (dedupHash && dedupLibraryPath) {
+        this.plugin.hashStore.store(dedupHash, itemId, displayName, dedupLibraryPath)
+        await this.plugin.hashStore.save(this.plugin).catch((e: unknown) => {
+          this.plugin.log.warn('failed to store upload hash', { err: e instanceof Error ? e.message : String(e) })
+        })
+      }
 
-    // Store hash for future deduplication (reuse pre-computed values)
-    if (dedupHash && dedupLibraryPath) {
-      this.plugin.hashStore.store(dedupHash, itemId, displayName, dedupLibraryPath)
-      await this.plugin.hashStore.save(this.plugin).catch((e: unknown) => {
-        this.plugin.log.warn('failed to store upload hash', { err: e instanceof Error ? e.message : String(e) })
-      })
-    }
-
-    return this.markdownImageFor(itemId, ext, displayName)
+      return this.markdownImageFor(itemId, ext, displayName)
+    })
   }
 
   /** Returns the embed for a previously uploaded item, or null when Eagle no longer has it (hash evicted, caller re-uploads). */
@@ -246,10 +265,12 @@ export class UploadService {
     }
     this.plugin.notices.show('duplicate_detected')
     const ext = extractFileExtension(fileUrl) || 'jpg'
-    await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
-      this.plugin.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
+    return this.whileInFlight(itemId, async () => {
+      await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
+        this.plugin.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
+      })
+      return this.markdownImageFor(itemId, ext, displayName)
     })
-    return this.markdownImageFor(itemId, ext, displayName)
   }
 
   async saveAsLocalAttachment(file: File, sourcePath = this.activeSourcePath()): Promise<string> {
