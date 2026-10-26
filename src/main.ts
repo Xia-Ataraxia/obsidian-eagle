@@ -6,12 +6,13 @@ import {
   Notice,
   Plugin,
   TFile,
+  debounce,
+  type Debouncer,
 } from 'obsidian'
 
 import EagleApiError from './domain/EagleApiError'
 import { sanitizeFolderMappings } from './domain/folder-mapping'
 import { EaglePluginSettings, settingsForPersist, settingsFromSavedData } from './domain/settings'
-import { DebounceController } from './utils/debounce-controller'
 import { PluginLogger } from './utils/plugin-logger'
 import { NoticeCatalog, PluginNotices } from './ui/plugin-notices'
 import { createEagleCanvasPasteHandler } from './ui/Canvas'
@@ -38,6 +39,9 @@ const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
   migrate_none: { template: 'No images to migrate.' },
   migrate_progress: { template: '{{step}}', timeout: 0, immutable: true },
   migrate_done: { template: 'Migrated {{images}} to {{folder}}.{{failureSuffix}}', timeout: 8000 },
+  cache_sync_progress: { template: '{{step}}', timeout: 0, immutable: true },
+  cache_sync_current: { template: 'Cache is already up to date.' },
+  cache_sync_done: { template: 'Cached {{images}}.{{failureSuffix}}', timeout: 8000 },
   import_failed_api: { template: "Couldn't import from Eagle. {{message}}" },
   import_failed: { template: "Couldn't insert the Eagle image." },
   no_active_editor: { template: 'Open a note to upload images.' },
@@ -91,22 +95,13 @@ export default class EaglePlugin extends Plugin {
   private readonly dataFile = new SerializedDataFile(this)
   private readonly uploads = new UploadService(this)
   readonly uploadProgress = new UploadProgress(() => this.notices)
-  private readonly cacheSync = new CacheSyncService(this)
+  readonly cacheSync = new CacheSyncService(this)
   private readonly imageMigration = new ImageMigrationService(this)
-  private _lastSyncedFilePath: string | null = null
-  private _pendingSyncFile: TFile | null = null
-  private readonly syncDebounce = new DebounceController({
-    delayMs: 500,
-    onRun: async () => {
-      const file = this._pendingSyncFile
-      if (!file) return
-      if (file.path === this._lastSyncedFilePath) return
-      this._lastSyncedFilePath = file.path
-      await this.cacheSync.syncCacheForFile(file).catch((err) => {
-        this.log.error('syncCacheForFile failed', err)
-      })
-    },
-  })
+  private readonly fileOpenSync = debounce((file: TFile) => void this.cacheSync.syncNote(file, true), 500, true)
+  // Per note, so typing or a burst of saves syncs once after the edits settle.
+  private readonly changeSyncs = new Map<string, Debouncer<[TFile], void>>()
+  // Paths of notes open in any tab; rebuilt lazily after the layout changes.
+  private openPaths: Set<string> | null = null
 
   private customPasteEventCallback = (e: ClipboardEvent) => {
     if (e.clipboardData) this.uploads.handleImageFiles(e.clipboardData.files, e)
@@ -169,13 +164,15 @@ export default class EaglePlugin extends Plugin {
     // initPlugin awaits loadData first, so unload can run before notices exist.
     const notices: PluginNotices | undefined = this.notices
     notices?.unload()
-    this.syncDebounce.dispose()
+    this.fileOpenSync.cancel()
+    for (const sync of this.changeSyncs.values()) sync.cancel()
   }
 
   private async initPlugin() {
     const raw = (await this.loadData()) as Record<string, unknown> | null
     this.loadSettings(raw)
     this.notices = new PluginNotices(this, EAGLE_NOTICE_CATALOG, 'Eagle')
+    this.register(() => this.cacheSync.dispose())
     const settingTab = new EaglePluginSettingsTab(this.app, this)
     this.addSettingTab(settingTab)
     this.notices.onMutedChange = () => settingTab.update()
@@ -188,11 +185,19 @@ export default class EaglePlugin extends Plugin {
     this.addUploadLocalCommand()
     this.addImportFromEagleLibraryCommand()
     this.addMigrateAllImagesCommand()
+    this.addSyncCacheCommand()
     this.registerEagleImageRenderer()
     this.app.workspace.onLayoutReady(() => {
-      void this.cacheSync.startupSync().catch((err) => {
-        this.log.error('background cache sync failed unexpectedly', err)
-      })
+      // file-open for the restored note fired before the plugin loaded; restored tabs and popouts get the backfill.
+      this.syncOpenNotes()
+      this.registerEvent(
+        this.app.metadataCache.on('changed', (file, content) => {
+          // Bulk external changes (git pull, sync) must not queue Eagle calls for notes nobody is viewing.
+          if (file.extension !== 'md' || this.cacheSync.isOwnWrite(file.path, content)) return
+          this.cacheSync.noteChanged(file.path)
+          if (this.openNotePaths().has(file.path)) this.changeSyncFor(file.path)(file)
+        }),
+      )
     })
   }
 
@@ -206,22 +211,68 @@ export default class EaglePlugin extends Plugin {
     this.registerEditorExtension(uploadPlaceholderExtension)
     this.registerEvent(
       this.app.workspace.on('active-leaf-change', (leaf) => {
+        this.openPaths = null
         const view = leaf?.view
         if (!view) return
 
         if (view.getViewType() === 'canvas') {
           this.overridePasteHandlerForCanvasView(view as unknown as CanvasView)
         }
-
-        const file = (view as unknown as { file?: unknown }).file
-        if (file instanceof TFile && file.extension === 'md') {
-          this._pendingSyncFile = file
-          this.syncDebounce.markDirty()
-        }
       }),
     )
+    this.registerEvent(this.app.workspace.on('layout-change', () => (this.openPaths = null)))
+    this.registerEvent(this.app.workspace.on('file-open', (file) => {
+      this.openPaths = null
+      if (file?.extension === 'md') this.fileOpenSync(file)
+    }))
+    this.registerEvent(this.app.vault.on('delete', (file) => this.dropChangeSync(file.path)))
+    this.registerEvent(this.app.vault.on('rename', (_file, oldPath) => {
+      this.openPaths = null
+      this.dropChangeSync(oldPath)
+    }))
 
     this.registerEvent(this.app.workspace.on('editor-menu', this.eaglePluginRightClickHandler))
+  }
+
+  private openNotePaths(): Set<string> {
+    if (this.openPaths) return this.openPaths
+    const paths = new Set<string>()
+    // Deferred tabs have no view yet, so read the path from the view state.
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const path = leaf.getViewState().state?.['file']
+      if (typeof path === 'string' && path.endsWith('.md')) paths.add(path)
+    })
+    this.openPaths = paths
+    return paths
+  }
+
+  private syncOpenNotes() {
+    const active = this.app.workspace.getActiveFile()?.path
+    for (const path of this.openNotePaths()) {
+      const file = this.app.vault.getFileByPath(path)
+      if (file) void this.cacheSync.syncNote(file, path === active)
+    }
+  }
+
+  private changeSyncFor(path: string): Debouncer<[TFile], void> {
+    let sync = this.changeSyncs.get(path)
+    if (!sync) {
+      sync = debounce((file: TFile) => {
+        this.changeSyncs.delete(path)
+        void this.cacheSync.syncNote(file)
+      }, 1500, true)
+      this.changeSyncs.set(path, sync)
+    }
+    return sync
+  }
+
+  private dropChangeSync(path: string) {
+    this.changeSyncs.get(path)?.cancel()
+    this.changeSyncs.delete(path)
+  }
+
+  isUploading(itemId: string): boolean {
+    return this.uploads.isUploading(itemId)
   }
 
   private readonly wrappedCanvasViews = new WeakSet<CanvasView>()
@@ -259,6 +310,16 @@ export default class EaglePlugin extends Plugin {
       name: 'Migrate all images to the cache folder',
       callback: () => {
         void this.imageMigration.migrateAllImages()
+      },
+    })
+  }
+
+  private addSyncCacheCommand() {
+    this.addCommand({
+      id: 'sync-cache-all-notes',
+      name: 'Sync Eagle cache for all notes',
+      callback: () => {
+        void this.cacheSync.syncAllNotes()
       },
     })
   }

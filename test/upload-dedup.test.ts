@@ -11,17 +11,17 @@ import { UploadService } from '../src/services/upload'
 
 type Reuse = (hash: string, existing: { itemId: string; displayName: string }, signal: AbortSignal) => Promise<string | null>
 
-function setup(getFileUrl: () => Promise<string>) {
+function setup(getFileUrl: () => Promise<string>, cacheFromOsPath = vi.fn().mockResolvedValue(undefined)) {
   const hashStore = { evict: vi.fn(), save: vi.fn().mockResolvedValue(undefined) }
   const plugin = {
     eagleUploader: { getFileUrlForItemId: getFileUrl },
     hashStore,
     notices: { show: vi.fn() },
-    cacheManager: { cacheFolder: 'cache', cacheFromOsPath: vi.fn().mockResolvedValue(undefined) },
+    cacheManager: { cacheFolder: 'cache', cacheFromOsPath },
     log: { warn: vi.fn() },
   }
-  const service = new UploadService(plugin as never) as unknown as { reuseExistingItem: Reuse }
-  return { hashStore, run: () => service.reuseExistingItem('h', { itemId: 'ID', displayName: 'n' }, new AbortController().signal) }
+  const service = new UploadService(plugin as never) as unknown as { reuseExistingItem: Reuse; isUploading: (id: string) => boolean }
+  return { hashStore, service, run: () => service.reuseExistingItem('h', { itemId: 'ID', displayName: 'n' }, new AbortController().signal) }
 }
 
 describe('dedup of stale hash entries', () => {
@@ -42,5 +42,21 @@ describe('dedup of stale hash entries', () => {
     const { hashStore, run } = setup(() => Promise.reject(new EagleUnreachableError('ECONNREFUSED')))
     await expect(run()).rejects.toBeInstanceOf(EagleUnreachableError)
     expect(hashStore.evict).not.toHaveBeenCalled()
+  })
+})
+
+describe('in-flight tracking', () => {
+  it('marks the item while its cache file is written and clears it even when the write throws', async () => {
+    let seenWhileWriting = false
+    const { service, run } = setup(
+      () => Promise.resolve('file:///lib/images/ID.info/n.png'),
+      vi.fn(() => {
+        seenWhileWriting = service.isUploading('ID')
+        throw new Error('disk full')
+      }),
+    )
+    await expect(run()).rejects.toThrow('disk full')
+    expect(seenWhileWriting).toBe(true)
+    expect(service.isUploading('ID')).toBe(false)
   })
 })

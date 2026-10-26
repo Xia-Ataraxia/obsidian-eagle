@@ -68,18 +68,22 @@ export async function replaceAllLocalReferencesWithRemoteOne(
 /**
  * Rewrites a note atomically via `Vault.process`: replacements are computed from the
  * content being written, so edits made while the rewrite runs are never overwritten.
- * Returns how many replacements were applied.
+ * Returns how many replacements were applied; `onWritten` gets the new content when any were.
  */
 export async function rewriteNote(
   vault: Vault,
   file: TFile,
   replacementsFor: (content: string) => TextReplacement[],
+  onWritten?: (content: string) => void,
 ): Promise<number> {
   let applied = 0
   await vault.process(file, (content) => {
     const replacements = replacementsFor(content)
     applied = replacements.length
-    return applied === 0 ? content : applyTextReplacements(content, replacements)
+    if (applied === 0) return content
+    const updated = applyTextReplacements(content, replacements)
+    onWritten?.(updated)
+    return updated
   })
   return applied
 }

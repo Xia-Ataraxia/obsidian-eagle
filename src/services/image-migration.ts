@@ -104,17 +104,18 @@ export class ImageMigrationService {
     // Phase 4: Update vault files atomically, re-reading tokens from the content being written
     let migratedCount = 0
     for (const file of filesWithOldFormat) {
-      migratedCount += await rewriteNote(this.plugin.app.vault, file, (content) =>
+      const count = await rewriteNote(this.plugin.app.vault, file, (content) =>
         findOldFormatTokens(content).flatMap(({ token, itemId }) => {
           const ext = successExt.get(itemId)
           return ext ? [{ start: token.start, end: token.end, text: wikilinkForCacheItem(cacheFolderName, itemId, ext) }] : []
         }),
       )
+      migratedCount += count
       tick('Updating notes…')
     }
 
     if (migratedCount > 0) {
-      // Migrated links carry no display name yet; let the next startup rename them.
+      // Migrated links carry no display name yet; "Sync Eagle cache for all notes" renames them.
       this.plugin.settings.legacyCacheNamesMigrated = false
       await this.plugin.saveSettings()
     }
