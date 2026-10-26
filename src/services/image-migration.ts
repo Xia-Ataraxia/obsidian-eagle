@@ -122,7 +122,7 @@ export class ImageMigrationService {
     let failureSuffix = ''
     if (failedIds.size > 0) {
       this.plugin.log.warn('images not migrated', { itemIds: Array.from(failedIds) })
-      failureSuffix = ` ${countLabel(failedIds.size, 'image')} couldn't be copied; see the developer console.`
+      failureSuffix = ` ${countLabel(failedIds.size, 'image')} couldn't be copied.`
     }
     this.plugin.notices.show('migrate_done', { images: countLabel(migratedCount, 'image'), folder: `${cacheFolderName}/`, failureSuffix })
   }

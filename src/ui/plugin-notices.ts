@@ -172,7 +172,7 @@ export class PluginNotices {
 
 		if (opts.progress) {
 			const { done, total } = opts.progress;
-			wrapper.createEl('progress', { cls: 'eagle-notice-progress', attr: { value: done, max: Math.max(total, 1) } });
+			wrapper.createEl('progress', { cls: 'eagle-notice-progress', attr: { value: done, max: Math.max(total, 1), 'aria-label': text } });
 		}
 
 		return fragment;
