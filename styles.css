@@ -68,6 +68,9 @@
 .eagle-picker-item:hover,
 .eagle-picker-item:focus-visible {
   transform: translateY(-2px);
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+  outline: none;
 }
 
 .eagle-picker-item:active {
@@ -81,13 +84,6 @@
 .eagle-picker-item:nth-child(5) { animation-delay: 0.08s; }
 .eagle-picker-item:nth-child(6) { animation-delay: 0.1s; }
 .eagle-picker-item:nth-child(n+7) { animation-delay: 0.12s; }
-
-.eagle-picker-item:hover,
-.eagle-picker-item:focus-visible {
-  background: var(--background-modifier-hover);
-  border-color: var(--interactive-accent);
-  outline: none;
-}
 
 .eagle-picker-thumb {
   position: relative;
@@ -120,6 +116,11 @@
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.5px;
+}
+
+.eagle-picker-missing {
+  display: flex;
+  color: var(--text-faint);
 }
 
 .eagle-picker-name {

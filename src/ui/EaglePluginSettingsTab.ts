@@ -44,6 +44,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   private originalCacheFolderName: string
   private previewDescEl: HTMLElement | null = null
   private statusBadge: HTMLElement | null = null
+  private connected: boolean | null = null
   private foldersPromise: Promise<EagleFolderList> | null = null
 
   constructor(app: App, plugin: EaglePlugin) {
@@ -144,6 +145,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     const items: SettingGroupItem[] = muted.length
       ? muted.map((id) => ({
           name: this.plugin.noticeLabel(id),
+          desc: 'Muted. Unmute to show it again.',
           render: (setting: Setting) => {
             setting.addButton((btn) => btn.setButtonText('Unmute').onClick(() => unmute([id])))
           },
@@ -151,7 +153,8 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
       : [{ name: 'No notices are muted', desc: 'Notices you silence with the bell button appear here.' }]
     if (muted.length > 1) {
       items.push({
-        name: 'Unmute all',
+        name: 'Restore all',
+        desc: 'Restore every muted notice',
         render: (setting: Setting) => {
           setting.addButton((btn) => btn.setButtonText('Unmute all').onClick(() => notices.unmuteAll()))
         },
@@ -162,6 +165,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
 
   private renderConnectionTest(setting: Setting): void {
     this.statusBadge = setting.controlEl.createSpan({ cls: 'eagle-connection-status', text: '○ checking…' })
+    if (this.connected !== null) this.updateConnectionBadge(this.connected)
     void this.eagleFolders()
     setting.addButton((btn) => {
       btn.setButtonText('Test connection').onClick(async () => {
@@ -214,7 +218,9 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
         text
           .setPlaceholder('Eagle-cache')
           .setValue(this.plugin.settings.cacheFolderName)
-          .onChange((value) => void this.setControlValue('cacheFolderName', value.trim() || 'eagle-cache'))
+          // In-memory while typing; persisted on blur and in hide() so partial names never hit data.json.
+          .onChange((value) => { this.plugin.settings.cacheFolderName = value.trim() || 'eagle-cache' })
+        text.inputEl.addEventListener('blur', () => void this.plugin.saveSettings())
       })
       .addButton((btn) => {
         btn.setButtonText('Browse').onClick(() => {
@@ -318,6 +324,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   }
 
   private updateConnectionBadge(connected: boolean): void {
+    this.connected = connected
     const badge = this.statusBadge
     if (!badge) return
     badge.removeClass('is-connected', 'is-disconnected')
@@ -382,6 +389,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   override hide() {
     this.foldersPromise = null
     this.statusBadge = null
+    this.connected = null
 
     const before = this.plugin.settings.folderMappings.length
     this.plugin.settings.folderMappings = sanitizeFolderMappings(

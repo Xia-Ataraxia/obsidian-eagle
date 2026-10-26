@@ -60,20 +60,23 @@ async function uploadImageOnCanvas(
     if (!modal.isOpen) return
 
     modal.close()
-    pasteRemoteImageToCanvas(canvas, itemId, fileUrl)
+    pasteImageToCanvas(canvas, `![eagle:${itemId}](${fileUrl})`)
   } catch (err: unknown) {
     modal.close()
     if (err instanceof DOMException && err.name === 'AbortError') {
       return
     }
-    throw err
+    // The clipboard is empty once this handler has awaited, so the original handler cannot recover the image; keep it in the vault.
+    plugin.log.warn('Eagle upload failed on canvas, saving locally', { err: err instanceof Error ? err.message : String(err) })
+    pasteImageToCanvas(canvas, await plugin.saveImageLocally(file))
+    plugin.notices.show('saved_locally')
   }
 }
 
-function pasteRemoteImageToCanvas(canvas: Canvas, itemId: string, imageUrl: string) {
+function pasteImageToCanvas(canvas: Canvas, text: string) {
   canvas.createTextNode({
     pos: canvas.posCenter(),
     position: 'center',
-    text: `![eagle:${itemId}](${imageUrl})`,
+    text,
   })
 }
