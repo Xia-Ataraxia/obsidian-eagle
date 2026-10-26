@@ -32,21 +32,23 @@ import { extractFileExtension } from './utils/image-format'
 import { SerializedDataFile } from './utils/serialized-data-file'
 
 const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
-  links_updated: { template: 'Updated {{links}} in {{files}}' },
+  links_updated: { template: 'Updated {{links}} in {{files}}.' },
   migrate_none: { template: 'No images to migrate.' },
+  migrate_progress: { template: '{{step}}', timeout: 0, immutable: true },
   migrate_done: { template: 'Migrated {{images}} to {{folder}}.{{failureSuffix}}', timeout: 8000 },
-  import_failed_api: { template: 'Failed to import from Eagle: {{message}}' },
-  import_failed: { template: 'Failed to insert Eagle image.' },
-  no_active_editor: { template: 'No active editor — cannot upload.' },
-  duplicate_detected: { template: 'Duplicate detected, reusing existing item' },
+  import_failed_api: { template: "Couldn't import from Eagle. {{message}}" },
+  import_failed: { template: "Couldn't insert the Eagle image." },
+  no_active_editor: { template: 'Open a note to upload images.' },
+  duplicate_detected: { template: 'Already in Eagle. Reused the existing image.' },
   cache_renamed: {
     template: "Moved cache to '{{newFolder}}'. Updated {{links}} in {{files}}, moved {{moved}}.",
     timeout: 10000,
   },
   cache_folder_kept: { template: "Kept cache folder '{{folder}}'." },
-  connection_ok: { template: 'Connected to Eagle' },
-  connection_fail: { template: 'Cannot reach Eagle — check host/port' },
+  connection_ok: { template: 'Connected to Eagle.' },
+  connection_fail: { template: "Can't reach Eagle. Make sure it's open and the host and port are right." },
   saved_locally: { template: 'Eagle unavailable. Image saved to your vault.', timeout: 5000 },
+  mappings_removed: { template: 'Removed {{mappings}}.' },
 }
 
 interface CanvasView {

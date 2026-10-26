@@ -2,7 +2,6 @@
 import {
   App,
   DropdownComponent,
-  Notice,
   PluginSettingTab,
   Setting,
   SettingDefinitionItem,
@@ -418,7 +417,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     )
     const removed = before - this.plugin.settings.folderMappings.length
     if (removed > 0) {
-      new Notice(`Eagle: removed ${countLabel(removed, 'incomplete folder mapping')}`)
+      this.plugin.notices.show('mappings_removed', { mappings: countLabel(removed, 'incomplete folder mapping') })
       // Rows rendered before the prune would otherwise stay on screen and shift onDelete indexes onto real mappings.
       this.update()
     }

@@ -21,6 +21,16 @@ export class ImageMigrationService {
   constructor(private readonly plugin: EaglePlugin) {}
 
   async migrateAllImages(): Promise<void> {
+    const { notices } = this.plugin
+    notices.show('migrate_progress', { step: 'Looking for images to migrate…' }, { progress: { done: 0, total: 0 } })
+    try {
+      await this.migrate()
+    } finally {
+      notices.remove('migrate_progress')
+    }
+  }
+
+  private async migrate(): Promise<void> {
     const cacheFolderName = this.plugin.settings.cacheFolderName
 
     // Phase 1: Find files with old-format tokens
@@ -42,6 +52,14 @@ export class ImageMigrationService {
       return
     }
 
+    // Each image is resolved then copied, and each note rewritten: one progress tick apiece.
+    let total = itemIds.size * 2 + filesWithOldFormat.length
+    let done = 0
+    const tick = (step: string) => {
+      done++
+      this.plugin.notices.show('migrate_progress', { step }, { progress: { done, total } })
+    }
+
     // Phase 2: Resolve Eagle API URLs
     const resolvedUrls = new Map<string, string>()
     const failedIds = new Set<string>()
@@ -59,8 +77,12 @@ export class ImageMigrationService {
           this.plugin.log.warn('failed to resolve URL during migration', { itemId })
           failedIds.add(itemId)
         }
+        tick('Finding images in Eagle…')
       }),
     )
+
+    // Unresolved images are never copied; shrink the total so the bar still ends full.
+    total = done + resolvedUrls.size + filesWithOldFormat.length
 
     // Phase 3: Copy image files from Eagle library into the vault cache folder
     const successExt = new Map<string, string>()
@@ -75,6 +97,7 @@ export class ImageMigrationService {
           this.plugin.log.error('failed to cache file during migration', err)
           failedIds.add(itemId)
         }
+        tick('Copying images…')
       }),
     )
 
@@ -87,6 +110,7 @@ export class ImageMigrationService {
           return ext ? [{ start: token.start, end: token.end, text: wikilinkForCacheItem(cacheFolderName, itemId, ext) }] : []
         }),
       )
+      tick('Updating notes…')
     }
 
     if (migratedCount > 0) {
@@ -97,9 +121,8 @@ export class ImageMigrationService {
 
     let failureSuffix = ''
     if (failedIds.size > 0) {
-      const sample = Array.from(failedIds).slice(0, 3).join(', ')
-      const extra = failedIds.size > 3 ? ` and ${failedIds.size - 3} more` : ''
-      failureSuffix = ` Failed: ${failedIds.size} (${sample}${extra})`
+      this.plugin.log.warn('images not migrated', { itemIds: Array.from(failedIds) })
+      failureSuffix = ` ${countLabel(failedIds.size, 'image')} couldn't be copied.`
     }
     this.plugin.notices.show('migrate_done', { images: countLabel(migratedCount, 'image'), folder: `${cacheFolderName}/`, failureSuffix })
   }
