@@ -1,5 +1,8 @@
 import { generatePseudoRandomId } from './pseudo-random'
 
+/** Stamped on every upload; the picker hides it since it would repeat on every card. */
+export const UPLOAD_ANNOTATION = 'Added via Obsidian Eagle Plugin'
+
 export interface ItemNameContext {
   originalName: string
   noteName: string
