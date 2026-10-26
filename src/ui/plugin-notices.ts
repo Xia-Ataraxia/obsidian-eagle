@@ -172,7 +172,9 @@ export class PluginNotices {
 
 		if (opts.progress) {
 			const { done, total } = opts.progress;
-			wrapper.createEl('progress', { cls: 'eagle-notice-progress', attr: { value: done, max: Math.max(total, 1), 'aria-label': text } });
+			// Until something finishes, an indeterminate bar shows the work is underway instead of an empty track.
+			const bar = wrapper.createEl('progress', { cls: 'eagle-notice-progress', attr: { max: Math.max(total, 1), 'aria-label': text } });
+			if (done > 0) bar.value = done;
 		}
 
 		return fragment;
