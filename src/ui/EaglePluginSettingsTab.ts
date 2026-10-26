@@ -92,7 +92,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
       },
       {
         type: 'list',
-        heading: 'Folder mapping (Obsidian → eagle)',
+        heading: 'Folder mapping (Obsidian → Eagle)',
         emptyState: 'No mappings yet. Add one to route specific Obsidian folders to Eagle folders.',
         addItem: {
           name: 'Add mapping',
@@ -369,6 +369,8 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     const removed = before - this.plugin.settings.folderMappings.length
     if (removed > 0) {
       new Notice(`Eagle: removed ${countLabel(removed, 'incomplete folder mapping')}`)
+      // Rows rendered before the prune would otherwise stay on screen and shift onDelete indexes onto real mappings.
+      this.update()
     }
     void this.plugin.saveSettings()
 
