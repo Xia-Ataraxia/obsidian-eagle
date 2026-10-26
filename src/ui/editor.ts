@@ -51,14 +51,7 @@ export const findLocalFileUnderCursor = (editor: Editor, ctx: MarkdownFileInfo) 
 }
 
 export const replaceFirstOccurrence = (editor: Editor, target: string, replacement: string) => {
-  const lines = editor.getValue().split('\n')
-  for (let i = 0; i < lines.length; i += 1) {
-    const ch = (lines[i] ?? '').indexOf(target)
-    if (ch !== -1) {
-      const from = { line: i, ch }
-      const to = { line: i, ch: ch + target.length }
-      editor.replaceRange(replacement, from, to)
-      break
-    }
-  }
+  const at = editor.getValue().indexOf(target)
+  if (at === -1) return
+  editor.replaceRange(replacement, editor.offsetToPos(at), editor.offsetToPos(at + target.length))
 }

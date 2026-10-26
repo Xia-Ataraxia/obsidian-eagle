@@ -26,6 +26,7 @@ import { renameCache } from './services/cache-rename'
 import { CacheSyncService } from './services/cache-sync'
 import { ImageMigrationService } from './services/image-migration'
 import { UploadService } from './services/upload'
+import { UploadProgress } from './services/upload-progress'
 import { eagleItemIdFromAlt, eagleItemIdFromLink } from './utils/eagle-item-id'
 import { safeCacheFolderPath } from './utils/eagle-path-contract'
 import { extractFileExtension } from './utils/image-format'
@@ -39,6 +40,8 @@ const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
   import_failed_api: { template: "Couldn't import from Eagle. {{message}}" },
   import_failed: { template: "Couldn't insert the Eagle image." },
   no_active_editor: { template: 'Open a note to upload images.' },
+  uploading: { template: 'Uploading {{images}}…', timeout: 0, immutable: true },
+  upload_failed: { template: "Couldn't upload the image. {{reason}}" },
   duplicate_detected: { template: 'Already in Eagle. Reused the existing image.' },
   cache_renamed: {
     template: "Moved cache to '{{newFolder}}'. Updated {{links}} in {{files}}, moved {{moved}}.",
@@ -86,6 +89,7 @@ export default class EaglePlugin extends Plugin {
 
   private readonly dataFile = new SerializedDataFile(this)
   private readonly uploads = new UploadService(this)
+  readonly uploadProgress = new UploadProgress(() => this.notices)
   private readonly cacheSync = new CacheSyncService(this)
   private readonly imageMigration = new ImageMigrationService(this)
   private _lastSyncedFilePath: string | null = null

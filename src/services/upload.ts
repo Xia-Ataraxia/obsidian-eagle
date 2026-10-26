@@ -12,7 +12,6 @@ import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { resolveMappedEagleFolder } from '../domain/folder-mapping'
 import { replaceFirstOccurrence } from '../ui/editor'
 import { fileUrlToOsPath } from '../ui/file-url'
-import ImageUploadBlockingModal from '../ui/ImageUploadBlockingModal'
 import InfoModal from '../ui/InfoModal'
 import { normalizeImageForUpload, removeReferenceIfPresent } from '../ui/misc'
 import { filesAndLinksStatsFrom, getAllCachedReferencesForFile, replaceAllLocalReferencesWithRemoteOne } from '../ui/obsidian-vault'
@@ -33,6 +32,11 @@ export interface LocalImageInEditor {
   }
   editor: Editor
   noteFile: TFile
+}
+
+interface NoteTarget {
+  view: MarkdownView
+  file: TFile
 }
 
 export class UploadService {
@@ -122,116 +126,105 @@ export class UploadService {
     start: EditorPosition,
     end: EditorPosition,
   ) {
+    const target = this.activeTarget()
+    if (!target) return
+    const link = editor.getRange(start, end)
     const arrayBuffer = await this.plugin.app.vault.readBinary(file)
     const fileToUpload = new File([arrayBuffer], file.name)
-    editor.replaceRange('\n', end, end)
-    const remoteMarkdownImage = await this.uploadFileAndEmbedEagleImage(fileToUpload, {
-      ch: 0,
-      line: end.line + 1,
-    }, false)
+    const remoteMarkdownImage = await this.uploadFileAndEmbedEagleImage(fileToUpload, target, end, false)
     if (remoteMarkdownImage) {
-      editor.replaceRange(`<!--${editor.getRange(start, end)}-->`, start, end)
+      await this.replaceInNote(target, `${link}\n${remoteMarkdownImage}`, `<!--${link}-->\n${remoteMarkdownImage}`)
     }
     return remoteMarkdownImage
   }
 
-  async uploadFileAndEmbedEagleImage(file: File, atPos?: EditorPosition, saveLocallyOnFailure = true) {
-    if (!this.activeEditor) {
+  /** Never blocks the editor: a placeholder marks the spot while the shared progress notice offers Cancel. */
+  async uploadFileAndEmbedEagleImage(file: File, target = this.activeTarget(), atPos?: EditorPosition, saveLocallyOnFailure = true) {
+    if (!target) {
       this.plugin.notices.show('no_active_editor')
       return
     }
-    const pasteId = generatePseudoRandomId()
-    this.insertTemporaryText(pasteId, atPos)
+    const progressText = UploadService.progressTextFor(generatePseudoRandomId())
+    // A placeholder after an existing link starts on its own line; a pasted one takes the cursor's place.
+    const placeholder = atPos ? `\n${progressText}` : `${progressText}\n`
+    if (atPos) target.view.editor.replaceRange(placeholder, atPos, atPos)
+    else target.view.editor.replaceSelection(placeholder)
 
-    const modal = new ImageUploadBlockingModal(this.plugin.app)
-    modal.open()
-    const controller = new AbortController()
-    modal.onCancel = () => {
-      controller.abort()
-    }
+    const progress = this.plugin.uploadProgress
+    const controller = progress.start()
+    const removePlaceholder = () => this.replaceInNote(target, placeholder, '')
+    controller.signal.addEventListener('abort', () => void removePlaceholder(), { once: true })
 
-    let markdownImage = ''
     try {
-      const folderName = this.resolveTargetEagleFolderForActiveFile()
-      const normalizedFile = await normalizeImageForUpload(file)
-      const originalName = file.name.replace(/\.[^.]+$/, '')
-      const noteName = this.plugin.app.workspace.getActiveFile()?.basename ?? ''
-      const displayName = resolveItemName(this.plugin.settings.uploadItemNameTemplate, { originalName, noteName })
-
-      // Deduplication: compute hash and library path once, reuse for lookup + storage
-      let dedupHash: string | null = null
-      let dedupLibraryPath: string | null = null
-
-      if (this.plugin.settings.deduplicateUploads) {
-        const buffer = await normalizedFile.arrayBuffer()
-        dedupHash = await EagleHashStore.computeHash(buffer)
-        dedupLibraryPath = await this.plugin.eagleUploader.getLibraryRootPath(controller.signal) ?? null
-        if (dedupLibraryPath) {
-          const existing = this.plugin.hashStore.lookup(dedupHash, dedupLibraryPath)
-          if (existing) {
-            const reused = await this.reuseExistingItem(dedupHash, existing, controller.signal)
-            if (reused) {
-              markdownImage = reused
-              this.embedMarkDownImage(pasteId, markdownImage)
-              modal.close()
-              return markdownImage
-            }
-          }
-        }
-      }
-
-      const { itemId, fileUrl, ext } = await this.plugin.eagleUploader.upload(normalizedFile, { folderName, signal: controller.signal, displayName })
-
-      if (fileUrl.startsWith('file://')) {
-        await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
-          this.plugin.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
-        })
-      }
-
-      // Store hash for future deduplication (reuse pre-computed values)
-      if (dedupHash && dedupLibraryPath) {
-        this.plugin.hashStore.store(dedupHash, itemId, displayName, dedupLibraryPath)
-        await this.plugin.hashStore.save(this.plugin).catch((e: unknown) => {
-          this.plugin.log.warn('failed to store upload hash', { err: e instanceof Error ? e.message : String(e) })
-        })
-      }
-
-      markdownImage = this.markdownImageFor(itemId, ext, displayName)
+      const markdownImage = await this.uploadToEagle(file, target, controller.signal)
+      await this.replaceInNote(target, progressText, markdownImage)
+      return markdownImage
     } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') {
-        modal.close()
-        this.handleFailedUpload(pasteId, ' upload cancelled ')
-        return markdownImage
-      }
+      if (e instanceof DOMException && e.name === 'AbortError') return
       // Pasted/dropped images exist nowhere else; keep them in the vault rather than losing them.
       if (saveLocallyOnFailure) {
-        const localLink = await this.saveAsLocalAttachment(file).catch((saveErr) => {
+        const localLink = await this.saveAsLocalAttachment(file, target.file.path).catch((saveErr) => {
           this.plugin.log.error('Local fallback save failed', saveErr)
           return null
         })
         if (localLink) {
           this.plugin.log.warn('Eagle upload failed, saved locally', { err: e instanceof EagleUnreachableError ? e.detail : e instanceof Error ? e.message : String(e) })
-          modal.close()
-          this.embedMarkDownImage(pasteId, localLink)
+          await this.replaceInNote(target, progressText, localLink)
           this.plugin.notices.show('saved_locally')
-          return markdownImage
+          return
         }
       }
-      if (e instanceof EagleApiError) {
-        this.plugin.log.error('Eagle upload failed', e)
-        modal.showError(`Upload failed: ${e.message}`)
-        this.handleFailedUpload(pasteId, `Eagle upload failed, API returned an error: ${e.message}`)
-      } else {
-        this.plugin.log.error('Failed upload request', e)
-        modal.showError('Upload failed — check the developer console for details.')
-        this.handleFailedUpload(pasteId, '⚠️Eagle upload failed, check dev console')
+      this.plugin.log.error('Eagle upload failed', e)
+      await removePlaceholder()
+      this.plugin.notices.show('upload_failed', {
+        reason: e instanceof EagleUnreachableError ? 'Make sure Eagle is open, then try again.' : 'Check the developer console for details.',
+      })
+      return
+    } finally {
+      progress.finish(controller)
+    }
+  }
+
+  private async uploadToEagle(file: File, target: NoteTarget, signal: AbortSignal): Promise<string> {
+    const folderName = this.resolveTargetEagleFolderForActiveFile()
+    const normalizedFile = await normalizeImageForUpload(file)
+    const originalName = file.name.replace(/\.[^.]+$/, '')
+    const displayName = resolveItemName(this.plugin.settings.uploadItemNameTemplate, { originalName, noteName: target.file.basename })
+
+    // Deduplication: compute hash and library path once, reuse for lookup + storage
+    let dedupHash: string | null = null
+    let dedupLibraryPath: string | null = null
+
+    if (this.plugin.settings.deduplicateUploads) {
+      const buffer = await normalizedFile.arrayBuffer()
+      dedupHash = await EagleHashStore.computeHash(buffer)
+      dedupLibraryPath = await this.plugin.eagleUploader.getLibraryRootPath(signal) ?? null
+      if (dedupLibraryPath) {
+        const existing = this.plugin.hashStore.lookup(dedupHash, dedupLibraryPath)
+        if (existing) {
+          const reused = await this.reuseExistingItem(dedupHash, existing, signal)
+          if (reused) return reused
+        }
       }
-      return markdownImage
     }
 
-    modal.close()
-    this.embedMarkDownImage(pasteId, markdownImage)
-    return markdownImage
+    const { itemId, fileUrl, ext } = await this.plugin.eagleUploader.upload(normalizedFile, { folderName, signal, displayName })
+
+    if (fileUrl.startsWith('file://')) {
+      await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
+        this.plugin.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
+      })
+    }
+
+    // Store hash for future deduplication (reuse pre-computed values)
+    if (dedupHash && dedupLibraryPath) {
+      this.plugin.hashStore.store(dedupHash, itemId, displayName, dedupLibraryPath)
+      await this.plugin.hashStore.save(this.plugin).catch((e: unknown) => {
+        this.plugin.log.warn('failed to store upload hash', { err: e instanceof Error ? e.message : String(e) })
+      })
+    }
+
+    return this.markdownImageFor(itemId, ext, displayName)
   }
 
   /** Returns the embed for a previously uploaded item, or null when Eagle no longer has it (hash evicted, caller re-uploads). */
@@ -258,29 +251,19 @@ export class UploadService {
     return this.markdownImageFor(itemId, ext, displayName)
   }
 
-  async saveAsLocalAttachment(file: File): Promise<string> {
-    const { fileManager, workspace } = this.plugin.app
-    const sourcePath = workspace.getActiveFile()?.path ?? ''
-    return `!${fileManager.generateMarkdownLink(await this.saveAttachmentFile(file), sourcePath)}`
+  async saveAsLocalAttachment(file: File, sourcePath = this.activeSourcePath()): Promise<string> {
+    const saved = await this.saveAttachmentFile(file, sourcePath)
+    return `!${this.plugin.app.fileManager.generateMarkdownLink(saved, sourcePath)}`
   }
 
-  async saveAttachmentFile(file: File): Promise<TFile> {
-    const { fileManager, vault, workspace } = this.plugin.app
-    const sourcePath = workspace.getActiveFile()?.path ?? ''
+  async saveAttachmentFile(file: File, sourcePath = this.activeSourcePath()): Promise<TFile> {
+    const { fileManager, vault } = this.plugin.app
     const path = await fileManager.getAvailablePathForAttachment(file.name || 'Pasted image.png', sourcePath)
     return vault.createBinary(path, await file.arrayBuffer())
   }
 
-  private insertTemporaryText(pasteId: string, atPos?: EditorPosition) {
-    const progressText = UploadService.progressTextFor(pasteId)
-    const replacement = `${progressText}\n`
-    const editor = this.activeEditor
-    if (!editor) return
-    if (atPos) {
-      editor.replaceRange(replacement, atPos, atPos)
-    } else {
-      editor.replaceSelection(replacement)
-    }
+  private activeSourcePath(): string {
+    return this.plugin.app.workspace.getActiveFile()?.path ?? ''
   }
 
   private static progressTextFor(id: string) {
@@ -291,23 +274,19 @@ export class UploadService {
     return wikilinkForCacheItem(this.plugin.cacheManager.cacheFolder, itemId, ext, displayName)
   }
 
-  private embedMarkDownImage(pasteId: string, markdownImage: string) {
-    const progressText = UploadService.progressTextFor(pasteId)
-    const editor = this.activeEditor
-    if (!editor) return
-    replaceFirstOccurrence(editor, progressText, markdownImage)
+  private activeTarget(): NoteTarget | null {
+    const view = this.plugin.app.workspace.getActiveViewOfType(MarkdownView)
+    return view?.file ? { view, file: view.file } : null
   }
 
-  private handleFailedUpload(pasteId: string, message: string) {
-    const progressText = UploadService.progressTextFor(pasteId)
-    const editor = this.activeEditor
-    if (!editor) return
-    replaceFirstOccurrence(editor, progressText, `<!--${message}-->`)
-  }
-
-  private get activeEditor(): Editor | null {
-    const mdView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView)
-    return mdView?.editor ?? null
+  /** Edits the note the upload started in, even after the user moved on to another one. */
+  private async replaceInNote(target: NoteTarget, search: string, replacement: string): Promise<void> {
+    const { view, file } = target
+    if (view.file === file) {
+      replaceFirstOccurrence(view.editor, search, replacement)
+      return
+    }
+    await this.plugin.app.vault.process(file, (text) => text.replace(search, () => replacement))
   }
 
   resolveTargetEagleFolderForActiveFile(): string | undefined {
