@@ -12,21 +12,19 @@ export type ItemOutcome = 'present' | 'cached' | 'skipped' | 'missing' | 'unreac
 export interface CacheSyncPlan {
   /** One token per named item not yet checked this session. */
   items: WikilinkEmbedToken[]
-  /** Pre-display-name `{itemId}.{ext}` links set aside for the rename, only when `renameLegacy` is on. */
+  /** One token per pre-display-name `{itemId}.{ext}` item; every note's links move, so checked items stay in. */
   legacy: WikilinkEmbedToken[]
 }
 
-/**
- * Picks the items in one note that still need a check; marking them checked is up to the outcome.
- * Without `renameLegacy`, legacy links are backfilled under the filename they already use.
- */
-export function planCacheSync(tokens: WikilinkEmbedToken[], checked: ReadonlySet<string>, renameLegacy: boolean): CacheSyncPlan {
+/** Picks the items in one note that still need work; marking them checked is up to the outcome. */
+export function planCacheSync(tokens: WikilinkEmbedToken[], checked: ReadonlySet<string>): CacheSyncPlan {
   const seen = new Set<string>()
   const plan: CacheSyncPlan = { items: [], legacy: [] }
   for (const token of tokens) {
-    if (checked.has(token.itemId) || seen.has(token.itemId)) continue
+    if (seen.has(token.itemId)) continue
+    const isLegacy = token.displayName === undefined
+    if (!isLegacy && checked.has(token.itemId)) continue
     seen.add(token.itemId)
-    const isLegacy = renameLegacy && token.displayName === undefined
     plan[isLegacy ? 'legacy' : 'items'].push(token)
   }
   return plan
@@ -64,26 +62,9 @@ export function retryPlan(outcomes: Iterable<ItemOutcome>, backoffRemainingMs: n
   return null
 }
 
-/**
- * The vault counts as migrated only when Eagle answered for every legacy link (missing items can never
- * be renamed) and every link to a renamed item was rewritten.
- */
-export function legacyMigrationComplete(outcomes: Iterable<ItemOutcome>, linkFailures: number): boolean {
-  if (linkFailures > 0) return false
-  for (const outcome of outcomes) if (outcome === 'unreachable' || outcome === 'error' || outcome === 'failed') return false
-  return true
-}
-
 /** Cheap stand-in for a note's content, enough to recognise the plugin's own write. */
 export function contentFingerprint(content: string): string {
   let hash = 0
   for (let i = 0; i < content.length; i++) hash = (Math.imul(hash, 31) + content.charCodeAt(i)) | 0
   return `${content.length}:${hash}`
-}
-
-export const PROGRESS_INTERVAL_MS = 250
-export const PROGRESS_EVERY_FILES = 25
-
-export function shouldReportProgress(done: number, total: number, lastReportAt: number, now: number): boolean {
-  return done === total || done % PROGRESS_EVERY_FILES === 0 || now - lastReportAt >= PROGRESS_INTERVAL_MS
 }

@@ -1,4 +1,4 @@
-import type { DataAdapter } from 'obsidian'
+import type { DataAdapter, MetadataCache } from 'obsidian'
 
 import type EaglePlugin from '../main'
 
@@ -7,6 +7,12 @@ import { rewriteNote } from '../ui/obsidian-vault'
 import { cachePathFor, safeCacheFolderPath, wikilinkForCacheItem } from '../utils/eagle-path-contract'
 import { findEagleWikilinkTokens } from '../utils/markdown-image'
 import { countLabel } from '../utils/plural'
+
+function notesLinkingInto(metadataCache: MetadataCache, folder: string): string[] {
+  return Object.entries(metadataCache.resolvedLinks)
+    .filter(([source, targets]) => source.endsWith('.md') && Object.keys(targets).some((target) => target.startsWith(`${folder}/`)))
+    .map(([source]) => source)
+}
 
 async function listFilesRecursive(adapter: DataAdapter, folder: string): Promise<string[]> {
   const listed = await adapter.list(folder)
@@ -51,6 +57,8 @@ export async function renameCache(plugin: EaglePlugin, oldFolder: string, newFol
   plugin.cacheManager = new EagleCacheManager(plugin.app, to)
   if (from === to) return
 
+  // Obsidian's link index names the notes to rewrite; read before the move, while the links still resolve.
+  const linking = notesLinkingInto(plugin.app.metadataCache, from)
   // Files move first; links are rewritten only for files that actually arrived.
   const moved = await moveCacheFiles(plugin, from, to).catch((err: unknown) => {
     plugin.log.warn('cache move failed', { err: err instanceof Error ? err.message : String(err) })
@@ -61,7 +69,9 @@ export async function renameCache(plugin: EaglePlugin, oldFolder: string, newFol
   let updatedLinks = 0
   if (moved.size > 0) {
     const { vault } = plugin.app
-    for (const file of vault.getMarkdownFiles()) {
+    for (const path of linking) {
+      const file = vault.getFileByPath(path)
+      if (!file) continue
       const count = await rewriteNote(vault, file, (content) =>
         findEagleWikilinkTokens(content, from)
           .filter((t) => moved.has(cachePathFor(from, t.itemId, t.ext, t.displayName)))

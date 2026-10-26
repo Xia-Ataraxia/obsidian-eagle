@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('obsidian', () => ({}))
 
-import { EagleNotFoundError } from '../src/domain/EagleApiError'
+import { EagleNotFoundError, EagleUnreachableError } from '../src/domain/EagleApiError'
 import { CacheSyncService } from '../src/services/cache-sync'
 import { cachePathFor } from '../src/utils/eagle-path-contract'
 
@@ -10,7 +10,7 @@ const OLD = cachePathFor('eagle-cache', 'ID', 'png')
 const NEW = cachePathFor('eagle-cache', 'ID', 'png', 'Sky')
 const LEGACY_LINK = `![[${OLD}]]`
 
-/** In-memory vault: notes and canvases by path, cache files on disk. */
+/** In-memory vault: notes by path, cache files on disk. */
 function setup(notes: Record<string, string>, opts: { libraryPath?: string; unreadable?: string[] } = {}) {
   const files = new Map(Object.entries(notes).map(([path]) => [path, { path, extension: path.split('.').pop() }]))
   const disk = new Set<string>([OLD])
@@ -30,7 +30,7 @@ function setup(notes: Record<string, string>, opts: { libraryPath?: string; unre
   }
   const plugin = {
     app: { vault },
-    settings: { legacyCacheNamesMigrated: false, cacheLibraryPath: '/lib/A.library' },
+    settings: { cacheLibraryPath: '/lib/A.library' },
     saveSettings: vi.fn().mockResolvedValue(undefined),
     notices: { show: vi.fn(), remove: vi.fn() },
     log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -76,35 +76,37 @@ describe('eviction', () => {
   })
 })
 
-describe('legacy migration command', () => {
-  it('rewrites a note that gained a legacy link during the run before the old file goes', async () => {
-    const { service, plugin, notes, disk } = setup({ 'a.md': LEGACY_LINK, 'b.md': 'draft' })
-    plugin.eagleUploader.getItemName.mockImplementation(() => {
-      notes['b.md'] = `draft ${LEGACY_LINK}`
-      service.noteChanged('b.md')
-      return Promise.resolve('Sky')
-    })
-    await service.syncAllNotes()
-    expect(notes['b.md']).toBe(`draft ![[${NEW}]]`)
-    expect([disk.has(OLD), disk.has(NEW)]).toEqual([false, true])
-    expect(plugin.settings.legacyCacheNamesMigrated).toBe(true)
+describe('legacy cache names', () => {
+  it('moves the open note to the named file and keeps the old file for other notes', async () => {
+    const { service, notes, disk, file } = setup({ 'a.md': `see ${LEGACY_LINK}` })
+    await service.syncNote(file('a.md'))
+    expect(notes['a.md']).toBe(`see ![[${NEW}]]`)
+    expect([disk.has(OLD), disk.has(NEW)]).toEqual([true, true])
   })
 
-  it('rewrites readable notes but keeps every old file when a note cannot be read', async () => {
-    const { service, plugin, notes, disk } = setup({ 'a.md': LEGACY_LINK, 'b.md': LEGACY_LINK }, { unreadable: ['b.md'] })
-    await service.syncAllNotes()
-    expect(notes['a.md']).toBe(`![[${NEW}]]`)
-    expect([disk.has(OLD), disk.has(NEW)]).toEqual([true, true])
-    expect(plugin.settings.legacyCacheNamesMigrated).toBe(false)
+  it('moves a later note without asking Eagle again', async () => {
+    const { service, plugin, notes, file } = setup({ 'a.md': LEGACY_LINK, 'b.md': `${LEGACY_LINK} twice ${LEGACY_LINK}` })
+    await service.syncNote(file('a.md'))
+    await service.syncNote(file('b.md'))
+    expect(notes['b.md']).toBe(`![[${NEW}]] twice ![[${NEW}]]`)
+    expect(plugin.eagleUploader.getItemName).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps the old file beside the new copy for an item a canvas references', async () => {
-    const { service, plugin, notes, disk } = setup({ 'a.md': LEGACY_LINK, 'board.canvas': `{"nodes":[{"file":"${OLD}"}]}` })
-    await service.syncAllNotes()
-    expect(notes['a.md']).toBe(`![[${NEW}]]`)
-    expect(notes['board.canvas']).toContain(OLD)
-    expect([disk.has(OLD), disk.has(NEW)]).toEqual([true, true])
-    expect(plugin.settings.legacyCacheNamesMigrated).toBe(false)
+  it('leaves the note alone while Eagle is closed', async () => {
+    const { service, plugin, notes, file } = setup({ 'a.md': LEGACY_LINK })
+    plugin.eagleUploader.getItemName.mockRejectedValue(new EagleUnreachableError('ECONNREFUSED'))
+    await service.syncNote(file('a.md'))
+    expect(notes['a.md']).toBe(LEGACY_LINK)
+    service.dispose()
+  })
+
+  it('stops asking about an item the cache library no longer has', async () => {
+    const { service, plugin, notes, file } = setup({ 'a.md': LEGACY_LINK })
+    plugin.eagleUploader.getItemName.mockResolvedValue(null)
+    await service.syncNote(file('a.md'))
+    await service.syncNote(file('a.md'))
+    expect(notes['a.md']).toBe(LEGACY_LINK)
+    expect(plugin.eagleUploader.getItemName).toHaveBeenCalledTimes(1)
   })
 })
 
