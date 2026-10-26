@@ -7,7 +7,7 @@ import type { NodeDataAdapter, NodeErrnoException } from '../types/obsidian'
 import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { EaglePluginSettings } from '../domain/settings'
 import { type EagleFolderTreeNode, extractResponseMessage, extractSearchItemsData, extractTextMessage, extractThumbnailCandidate, flattenFolderTree, normalizeRequestError, parseCreateFolderResponse, parseFolderList, parseFolderListResponse, parseItemInfoResponse, parseLibraryInfoResponse, parseSearchItemsResponse, parseStringDataResponse } from '../utils/eagle-response-parsers'
-import { hasAllTags } from '../utils/search-query'
+import { selectByTags, tagFetchLimit } from '../utils/search-query'
 import { withTimeout } from '../utils/with-timeout'
 import { raceAbort } from '../utils/race-abort'
 import { PluginLogger } from '../utils/plugin-logger'
@@ -441,7 +441,7 @@ export default class EagleUploader {
     if (trimmedKeyword) params.set('keyword', trimmedKeyword)
     if (tags.length > 0) params.set('tags', tags.join(','))
 
-    params.set('limit', String(limit))
+    params.set('limit', String(tagFetchLimit(limit, tags.length)))
 
     if (orderBy) {
       params.set('orderBy', orderBy)
@@ -458,7 +458,7 @@ export default class EagleUploader {
 
     const rawItems = extractSearchItemsData(data.data)
 
-    return rawItems
+    const items = rawItems
       .map((candidate) => {
         if (!candidate.id) {
           return null
@@ -482,6 +482,7 @@ export default class EagleUploader {
           thumbnail: extractThumbnailCandidate(candidate),
         }
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null && hasAllTags(item.tags, tags))
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+    return selectByTags(items, tags, limit)
   }
 }

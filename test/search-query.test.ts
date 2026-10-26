@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { hasAllTags, parseSearchQuery } from '../src/utils/search-query'
+import { hasAllTags, parseSearchQuery, selectByTags, tagFetchLimit } from '../src/utils/search-query'
 
 describe(parseSearchQuery, () => {
   it.each([
@@ -23,5 +23,16 @@ describe(hasAllTags, () => {
     expect(hasAllTags(['Analog'], ['analog', 'portrait'])).toBe(false)
     expect(hasAllTags(undefined, [])).toBe(true)
     expect(hasAllTags(undefined, ['a'])).toBe(false)
+  })
+})
+
+describe('multi-tag fetch', () => {
+  it('widens the request only for 2+ tags', () => {
+    expect(tagFetchLimit(100, 1)).toBe(100)
+    expect(tagFetchLimit(100, 2)).toBe(1000)
+  })
+  it('keeps only items with every tag, trimmed to the limit', () => {
+    const items = Array.from({ length: 5 }, (_, i) => ({ id: i, tags: ['a', 'b'] })).concat([{ id: 9, tags: ['a'] }])
+    expect(selectByTags(items, ['a', 'b'], 3).map((i) => i.id)).toEqual([0, 1, 2])
   })
 })
