@@ -45,12 +45,18 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   private previewDescEl: HTMLElement | null = null
   private statusBadge: HTMLElement | null = null
   private connected: boolean | null = null
+  private connectionCheckId = 0
   private foldersPromise: Promise<EagleFolderList> | null = null
   private readonly recheckConnection = new DebounceController({
     delayMs: 600,
-    onRun: async () => {
+    // Not awaited: a hung check must not block the next one; only the newest result updates the badge.
+    onRun: () => {
       this.foldersPromise = null
-      this.updateConnectionBadge(await this.plugin.eagleUploader.isConnected())
+      const check = ++this.connectionCheckId
+      void this.plugin.eagleUploader.isConnected().then((ok) => {
+        if (check === this.connectionCheckId) this.updateConnectionBadge(ok)
+      })
+      return Promise.resolve()
     },
   })
 
@@ -69,6 +75,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     await this.plugin.saveSettings()
     if (key === 'eagleFolderName') this.updatePreviewDesc()
     if (key === 'eagleHost' || key === 'eaglePort') {
+      this.connectionCheckId++
       this.statusBadge?.removeClasses(['is-connected', 'is-disconnected'])
       this.statusBadge?.setText('○ checking…')
       this.recheckConnection.markDirty()
