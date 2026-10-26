@@ -132,6 +132,11 @@ export default class EaglePlugin extends Plugin {
     this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
   }
 
+  noticeLabel(id: string): string {
+    const template = EAGLE_NOTICE_CATALOG[id]?.template ?? id
+    return template.replace(/{{\s*[\w.-]+\s*}}/g, '…')
+  }
+
   saveImageLocally(file: File): Promise<string> {
     return this.uploads.saveAsLocalAttachment(file)
   }
@@ -165,7 +170,9 @@ export default class EaglePlugin extends Plugin {
     const raw = (await this.loadData()) as Record<string, unknown> | null
     this.loadSettings(raw)
     this.notices = new PluginNotices(this, EAGLE_NOTICE_CATALOG, 'Eagle')
-    this.addSettingTab(new EaglePluginSettingsTab(this.app, this))
+    const settingTab = new EaglePluginSettingsTab(this.app, this)
+    this.addSettingTab(settingTab)
+    this.notices.onMutedChange = () => settingTab.update()
 
     this.setupEagleUploader()
     this._cacheManager = new EagleCacheManager(this.app, this.settings.cacheFolderName)
