@@ -428,17 +428,17 @@ export default class EagleUploader {
 
   async searchItems({
     keyword,
+    tags = [],
     limit = 200,
     orderBy,
     offset = 0,
   }: EagleItemSearchOptions): Promise<EagleItemSearchResult[]> {
     const trimmedKeyword = keyword.trim()
-    if (!trimmedKeyword) return []
+    if (!trimmedKeyword && tags.length === 0) return []
 
-    const params = new URLSearchParams({
-      keyword: trimmedKeyword,
-      offset: String(offset),
-    })
+    const params = new URLSearchParams({ offset: String(offset) })
+    if (trimmedKeyword) params.set('keyword', trimmedKeyword)
+    if (tags.length > 0) params.set('tags', tags.join(','))
 
     params.set('limit', String(limit))
 

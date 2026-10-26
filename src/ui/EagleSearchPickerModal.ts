@@ -3,6 +3,7 @@ import { App, ButtonComponent, Modal, TextComponent, setIcon } from 'obsidian'
 import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { searchErrorStatus } from '../domain/search-error'
 import { countLabel } from '../utils/plural'
+import { parseSearchQuery } from '../utils/search-query'
 import { nextThumbnailRetry } from '../utils/thumbnail-retry'
 import { PluginLogger } from '../utils/plugin-logger'
 import type { EagleItemSearchResult, EagleSearchPickerUploader } from '../types/eagle-uploader-types'
@@ -53,7 +54,7 @@ export default class EagleSearchPickerModal extends Modal {
     contentEl.addClass('eagle-picker')
 
     this.keywordInput = new TextComponent(contentEl)
-      .setPlaceholder('Type to search title / annotation / tag')
+      .setPlaceholder('Search by title or annotation, add a #tag')
       .setValue('')
     this.keywordInput.inputEl.addClass('eagle-picker-search')
     this.keywordInput.inputEl.addEventListener('input', () => {
@@ -68,7 +69,7 @@ export default class EagleSearchPickerModal extends Modal {
 
     this.statusEl = contentEl.createEl('p', {
       cls: 'eagle-picker-status',
-      text: 'Type a keyword to search Eagle images.',
+      text: 'Type a keyword, or #tag, to search Eagle images.',
     })
 
     this.gridEl = contentEl.createDiv({ cls: 'eagle-picker-grid' })
@@ -125,18 +126,19 @@ export default class EagleSearchPickerModal extends Modal {
   }
 
   private async runSearch(): Promise<void> {
-    const keyword = this.keywordInput.getValue().trim()
-    if (!keyword) {
+    const query = this.keywordInput.getValue().trim()
+    const { keyword, tags } = parseSearchQuery(query)
+    if (!keyword && tags.length === 0) {
       this.results = []
       this.resetThumbnailFallbacks()
-      this.setStatus('Type a keyword to search Eagle images.', 'idle')
+      this.setStatus('Type a keyword, or #tag, to search Eagle images.', 'idle')
       this.renderGrid()
       return
     }
 
     const token = ++this.activeSearchToken
     this.setStatus('Searching…', 'loading')
-    this.debugLog('search:start', { keyword, limit: SEARCH_RESULT_LIMIT, token })
+    this.debugLog('search:start', { keyword, tags, limit: SEARCH_RESULT_LIMIT, token })
 
     this.gridEl.empty()
     for (let i = 0; i < 6; i++) {
@@ -146,6 +148,7 @@ export default class EagleSearchPickerModal extends Modal {
     try {
       const results = await this.uploader.searchItems({
         keyword,
+        tags,
         limit: SEARCH_RESULT_LIMIT,
         orderBy: 'time',
       })
@@ -163,7 +166,7 @@ export default class EagleSearchPickerModal extends Modal {
         count: results.length,
       })
       if (results.length === 0) {
-        this.setStatus(`No results for "${keyword}".`, 'info')
+        this.setStatus(`No results for "${query}".`, 'info')
       } else {
         this.setStatus(`Found ${countLabel(results.length, 'result')}. Select one to insert.`, 'info')
       }
@@ -237,7 +240,7 @@ export default class EagleSearchPickerModal extends Modal {
             this.keywordInput.setValue('')
             this.results = []
             this.resetThumbnailFallbacks()
-            this.setStatus('Type a keyword to search Eagle images.', 'idle')
+            this.setStatus('Type a keyword, or #tag, to search Eagle images.', 'idle')
             this.renderGrid()
             this.keywordInput.inputEl.focus()
           })
