@@ -224,10 +224,38 @@
 
 /* ── Connection Status Badge ────────────────────────────────────────────── */
 
+/* Obsidian fits dropdowns to their label; a fixed width keeps every mapping row aligned. */
+.eagle-mapping-row .setting-item-control > select.dropdown {
+  width: 11em;
+}
+
 .eagle-connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-4-1);
   font-size: var(--font-ui-smaller);
-  margin-right: 8px;
+  margin-right: var(--size-4-2);
   color: var(--text-muted);
+  white-space: nowrap;
+  transition: color 200ms ease-out;
+}
+
+.eagle-connection-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  transition: background-color 200ms ease-out, transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.eagle-connection-status.is-checking::before {
+  animation: eagle-pulse 1.2s ease-in-out infinite;
+}
+
+.eagle-connection-status.is-connected::before,
+.eagle-connection-status.is-disconnected::before {
+  animation: eagle-dot-settle 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .eagle-connection-status.is-connected {
@@ -341,6 +369,10 @@
   from { opacity: 0; }
 }
 
+@keyframes eagle-dot-settle {
+  from { transform: scale(0.4); }
+}
+
 @keyframes eagle-pulse {
   0%, 100% { opacity: 0.6; }
   50% { opacity: 1; }
@@ -366,6 +398,15 @@
   .eagle-skeleton-card,
   .eagle-picker-thumb.is-loading {
     animation: eagle-pulse 2.4s ease-in-out infinite;
+  }
+
+  .eagle-connection-status.is-checking::before {
+    animation-duration: 2.4s;
+  }
+
+  .eagle-connection-status.is-connected::before,
+  .eagle-connection-status.is-disconnected::before {
+    animation: eagle-card-fade 0.3s ease;
   }
 }
 
