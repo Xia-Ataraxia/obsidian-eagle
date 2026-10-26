@@ -114,7 +114,7 @@ export class ImageMigrationService {
     }
 
     if (migratedCount > 0) {
-      // Migrated links carry no display name yet; let the next startup rename them.
+      // Migrated links carry no display name yet; the rewrite re-fires metadata changes, which run the rename.
       this.plugin.settings.legacyCacheNamesMigrated = false
       await this.plugin.saveSettings()
     }

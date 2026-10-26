@@ -4,6 +4,7 @@ import type EaglePlugin from '../main'
 
 import EagleApiError from '../domain/EagleApiError'
 import { wikilinkForCacheItem } from '../utils/eagle-path-contract'
+import { planCacheSync } from '../utils/cache-sync-plan'
 import { findEagleWikilinkTokens, type WikilinkEmbedToken } from '../utils/markdown-image'
 import { fileUrlToOsPath } from '../ui/file-url'
 import { rewriteNote } from '../ui/obsidian-vault'
@@ -90,78 +91,50 @@ export class CacheSyncService {
     )
   }
 
-  /** Startup pass: the legacy-name migration is attempted once per vault; afterwards only the cache sync runs. */
-  async startupSync(): Promise<void> {
-    if (this.plugin.settings.legacyCacheNamesMigrated) return this.lazySyncEagleCache()
+  private readonly checkedItems = new Set<string>()
+  private legacyMigration: Promise<void> | null = null
 
-    const contents = await this.readAllMarkdown()
-    const cacheFolder = this.plugin.cacheManager.cacheFolder
-    const hasLegacyNames = contents.some((c) => findEagleWikilinkTokens(c, cacheFolder).some((t) => t.displayName === undefined))
-    if (hasLegacyNames) {
-      await this.migrateCacheFilesToReadableNames().catch((err) => {
-        this.plugin.log.error('cache filename migration failed', err)
-      })
-    }
-    this.plugin.settings.legacyCacheNamesMigrated = true
-    await this.plugin.saveSettings()
-    // Migration rewrites links, so the sync must re-read afterwards.
-    return hasLegacyNames ? this.lazySyncEagleCache() : this.lazySyncEagleCache(contents)
-  }
-
-  private readAllMarkdown(): Promise<string[]> {
-    return Promise.all(
-      this.plugin.app.vault.getMarkdownFiles().map(async (file) => {
-        try {
-          return await this.plugin.app.vault.read(file)
-        } catch {
-          this.plugin.log.warn('failed to read file during lazy cache sync', { path: file.path })
-          return ''
-        }
-      }),
-    )
-  }
-
-  async lazySyncEagleCache(contents?: string[]): Promise<void> {
-    const cacheFolder = this.plugin.cacheManager.cacheFolder
-    // Phase 1: Collect unique itemId → ext across all vault files in parallel
-    const seen = new Map<string, { ext: string; displayName: string | undefined }>() // itemId → {ext, displayName}
-    const fileContents = contents ?? await this.readAllMarkdown()
-    for (const content of fileContents) {
-      for (const token of findEagleWikilinkTokens(content, cacheFolder)) {
-        if (!seen.has(token.itemId)) seen.set(token.itemId, { ext: token.ext, displayName: token.displayName })
-      }
+  /**
+   * Per-note backfill, fed by metadataCache 'changed' so no vault scan runs at launch.
+   * Each item is checked once per session; file-open runs the full check via syncCacheForFile.
+   */
+  async syncNoteContent(content: string): Promise<void> {
+    const tokens = findEagleWikilinkTokens(content, this.plugin.cacheManager.cacheFolder)
+    if (tokens.length === 0) return
+    const { items, hasLegacyNames } = planCacheSync(tokens, this.checkedItems)
+    if (hasLegacyNames && !this.plugin.settings.legacyCacheNamesMigrated) {
+      // The rename rewrites links, which re-fires 'changed' for those notes.
+      this.legacyMigration ??= this.migrateLegacyNamesOnce()
+      return this.legacyMigration
     }
 
-    // Phase 2: Filter to uncached in parallel — allSettled so one adapter failure doesn't abort the rest
-    const entries = Array.from(seen.entries())
-    const cachedResults = await Promise.allSettled(
-      entries.map(([id, { ext, displayName }]) => this.plugin.cacheManager.isCached(id, ext, displayName)),
-    )
-    const uncached = entries
-      .filter((_, i) => {
-        const result = cachedResults[i]
-        if (!result || result.status === 'rejected') {
-          this.plugin.log.warn('isCached check failed, treating as uncached', { id: entries[i]?.[0] })
-          return true // attempt sync anyway
-        }
-        return !result.value
-      })
-      .map(([itemId, { ext, displayName }]) => ({ itemId, ext, displayName }))
-    if (uncached.length === 0) return
-
-    // Phase 3: Fetch URLs and cache all concurrently
     await Promise.allSettled(
-      uncached.map(async ({ itemId, ext, displayName }) => {
+      items.map(async ({ itemId, ext, displayName }) => {
         try {
+          if (await this.plugin.cacheManager.isCached(itemId, ext, displayName)) return
           const fileUrl = await this.plugin.eagleUploader.getFileUrlForItemId(itemId)
           if (!fileUrl.startsWith('file://')) return
           await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName)
         } catch (err) {
+          this.checkedItems.delete(itemId)
           if (err instanceof EagleApiError) return // Eagle not running or item missing — expected
-          this.plugin.log.error('unexpected error during lazy cache sync', err)
+          this.plugin.log.error('unexpected error during cache sync', err)
         }
       }),
     )
+  }
+
+  /** The legacy-name rename is attempted once per vault, only after a note with legacy links shows up. */
+  private async migrateLegacyNamesOnce(): Promise<void> {
+    try {
+      await this.migrateCacheFilesToReadableNames()
+    } catch (err) {
+      this.plugin.log.error('cache filename migration failed', err)
+    }
+    this.plugin.settings.legacyCacheNamesMigrated = true
+    await this.plugin.saveSettings()
+    this.checkedItems.clear()
+    this.legacyMigration = null
   }
 
   async syncCacheForFile(file: TFile): Promise<void> {

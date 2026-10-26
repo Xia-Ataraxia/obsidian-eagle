@@ -190,9 +190,16 @@ export default class EaglePlugin extends Plugin {
     this.addMigrateAllImagesCommand()
     this.registerEagleImageRenderer()
     this.app.workspace.onLayoutReady(() => {
-      void this.cacheSync.startupSync().catch((err) => {
-        this.log.error('background cache sync failed unexpectedly', err)
-      })
+      // file-open for the restored note fired before the plugin loaded.
+      this.queueFileSync(this.app.workspace.getActiveFile())
+      this.registerEvent(
+        this.app.metadataCache.on('changed', (file, content) => {
+          if (file.extension !== 'md') return
+          void this.cacheSync.syncNoteContent(content).catch((err) => {
+            this.log.error('cache sync failed unexpectedly', err)
+          })
+        }),
+      )
     })
   }
 
@@ -212,16 +219,17 @@ export default class EaglePlugin extends Plugin {
         if (view.getViewType() === 'canvas') {
           this.overridePasteHandlerForCanvasView(view as unknown as CanvasView)
         }
-
-        const file = (view as unknown as { file?: unknown }).file
-        if (file instanceof TFile && file.extension === 'md') {
-          this._pendingSyncFile = file
-          this.syncDebounce.markDirty()
-        }
       }),
     )
+    this.registerEvent(this.app.workspace.on('file-open', (file) => this.queueFileSync(file)))
 
     this.registerEvent(this.app.workspace.on('editor-menu', this.eaglePluginRightClickHandler))
+  }
+
+  private queueFileSync(file: TFile | null) {
+    if (file?.extension !== 'md') return
+    this._pendingSyncFile = file
+    this.syncDebounce.markDirty()
   }
 
   private readonly wrappedCanvasViews = new WeakSet<CanvasView>()
