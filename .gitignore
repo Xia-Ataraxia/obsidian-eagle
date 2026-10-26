@@ -10,3 +10,8 @@ test-results.xml
 .claude/
 .omc/
 .dev-vault/
+
+# synced from boiler-template
+.vscode
+*.iml
+.idea
