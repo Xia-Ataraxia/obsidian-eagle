@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { withTimeout } from '../src/utils/with-timeout'
 
-vi.stubGlobal('window', globalThis)
+vi.stubGlobal('window', { setTimeout, clearTimeout })
 
 describe(withTimeout, () => {
   it('returns the fallback when the promise hangs', async () => {
