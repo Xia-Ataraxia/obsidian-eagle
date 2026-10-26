@@ -76,8 +76,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     if (key === 'eagleFolderName') this.updatePreviewDesc()
     if (key === 'eagleHost' || key === 'eaglePort') {
       this.connectionCheckId++
-      this.statusBadge?.removeClasses(['is-connected', 'is-disconnected'])
-      this.statusBadge?.setText('○ checking…')
+      this.showChecking()
       this.recheckConnection.markDirty()
     }
   }
@@ -184,16 +183,22 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
   }
 
   private renderConnectionTest(setting: Setting): void {
-    this.statusBadge = setting.controlEl.createSpan({ cls: 'eagle-connection-status', text: '○ checking…' })
-    if (this.connected !== null) this.updateConnectionBadge(this.connected)
+    this.statusBadge = setting.controlEl.createSpan({ cls: 'eagle-connection-status' })
+    if (this.connected === null) this.showChecking()
+    else this.updateConnectionBadge(this.connected)
     void this.eagleFolders()
     setting.addButton((btn) => {
       btn.setButtonText('Test connection').onClick(async () => {
         btn.setDisabled(true)
         btn.setButtonText('Testing…')
+        const check = ++this.connectionCheckId
+        this.showChecking()
         const connected = await this.plugin.eagleUploader.isConnected()
-        this.updateConnectionBadge(connected)
-        this.plugin.notices.show(connected ? 'connection_ok' : 'connection_fail')
+        // A host/port edit or a newer test started meanwhile; its result owns the badge.
+        if (check === this.connectionCheckId) {
+          this.updateConnectionBadge(connected)
+          this.plugin.notices.show(connected ? 'connection_ok' : 'connection_fail')
+        }
         btn.setDisabled(false)
         btn.setButtonText('Test connection')
       })
@@ -290,11 +295,12 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
 
   private renderFolderMappingRow(setting: Setting, mapping: ObsidianEagleFolderMapping): void {
     let obsidianInput: TextComponent
+    setting.settingEl.addClass('eagle-mapping-row')
     setting
       .addText((text) => {
         obsidianInput = text
         text
-          .setPlaceholder('Obsidian folder (e.g. Projects/design)')
+          .setPlaceholder('Vault folder')
           .setValue(mapping.obsidianFolder)
           .onChange((value) => {
             mapping.obsidianFolder = value
@@ -315,7 +321,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
       )
     setting.addText((text) =>
       text
-        .setPlaceholder('Eagle folder (e.g. Design)')
+        .setPlaceholder('Eagle folder')
         .setValue(mapping.eagleFolder)
         .onChange((value) => {
           mapping.eagleFolder = value
@@ -324,14 +330,15 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     )
     const eagleControl = setting.controlEl.lastElementChild
     void this.eagleFolders().then((folders) => {
-      if (folders.length === 0 || !setting.settingEl.isConnected) return
-      eagleControl?.remove()
+      // A re-render before the list loads detaches this text input; only the live row swaps, in place.
+      if (folders.length === 0 || !eagleControl?.isConnected) return
       setting.addDropdown((dropdown) => {
-        this.fillEagleFolderOptions(dropdown, folders, mapping.eagleFolder, '— pick Eagle folder —')
+        this.fillEagleFolderOptions(dropdown, folders, mapping.eagleFolder, 'Eagle folder')
         dropdown.onChange((value) => {
           mapping.eagleFolder = value
           this.updatePreviewDesc()
         })
+        eagleControl.replaceWith(dropdown.selectEl)
       })
     })
   }
@@ -351,27 +358,29 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     return this.foldersPromise
   }
 
+  private showChecking(): void {
+    this.statusBadge?.removeClasses(['is-connected', 'is-disconnected'])
+    this.statusBadge?.addClass('is-checking')
+    this.statusBadge?.setText('Checking…')
+  }
+
   private updateConnectionBadge(connected: boolean): void {
     this.connected = connected
     const badge = this.statusBadge
     if (!badge) return
-    badge.removeClass('is-connected', 'is-disconnected')
-    if (connected) {
-      badge.addClass('is-connected')
-      badge.setText('● connected')
-    } else {
-      badge.addClass('is-disconnected')
-      badge.setText('● disconnected')
-    }
+    badge.removeClasses(['is-checking', 'is-connected', 'is-disconnected'])
+    badge.addClass(connected ? 'is-connected' : 'is-disconnected')
+    badge.setText(connected ? 'Connected' : 'Not connected')
   }
 
   private async fetchEagleFolders(): Promise<EagleFolderList> {
+    const check = this.connectionCheckId
     try {
       const folders = await this.plugin.eagleUploader.listFolders()
-      this.updateConnectionBadge(true)
+      if (check === this.connectionCheckId) this.updateConnectionBadge(true)
       return folders
     } catch (err) {
-      this.updateConnectionBadge(false)
+      if (check === this.connectionCheckId) this.updateConnectionBadge(false)
       if (!(err instanceof EagleUnreachableError)) {
         this.log.error('unexpected error while loading folder list', err)
       }
