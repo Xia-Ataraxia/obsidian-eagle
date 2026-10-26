@@ -217,8 +217,8 @@ export default class EagleSearchPickerModal extends Modal {
 
     if (this.results.length === 0) {
       const emptyState = this.gridEl.createDiv({ cls: 'eagle-picker-empty-state' })
-      // The status line already explains a failed search.
-      if (this.statusKind !== 'error') {
+      // The status line already explains a failed search or an empty query.
+      if (this.statusKind !== 'error' && this.statusKind !== 'idle') {
         emptyState.createEl('p', {
           text: 'No results.',
           cls: 'eagle-picker-empty',

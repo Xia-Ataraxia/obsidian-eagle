@@ -7,6 +7,7 @@ import type { NodeDataAdapter, NodeErrnoException } from '../types/obsidian'
 import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { EaglePluginSettings } from '../domain/settings'
 import { type EagleFolderTreeNode, extractResponseMessage, extractSearchItemsData, extractTextMessage, extractThumbnailCandidate, flattenFolderTree, normalizeRequestError, parseCreateFolderResponse, parseFolderList, parseFolderListResponse, parseItemInfoResponse, parseLibraryInfoResponse, parseSearchItemsResponse, parseStringDataResponse } from '../utils/eagle-response-parsers'
+import { hasAllTags } from '../utils/search-query'
 import { withTimeout } from '../utils/with-timeout'
 import { raceAbort } from '../utils/race-abort'
 import { PluginLogger } from '../utils/plugin-logger'
@@ -481,6 +482,6 @@ export default class EagleUploader {
           thumbnail: extractThumbnailCandidate(candidate),
         }
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .filter((item): item is NonNullable<typeof item> => item !== null && hasAllTags(item.tags, tags))
   }
 }
