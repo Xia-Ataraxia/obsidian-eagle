@@ -10,6 +10,8 @@ import type { EagleItemSearchResult, EagleSearchPickerUploader } from '../types/
 import { fileUrlToDisplayUrl } from './file-url'
 
 const SEARCH_RESULT_LIMIT = 100
+const RECENT_LIMIT = 30
+const SKELETON_ROWS = 2
 const THUMBNAIL_CONCURRENCY = 6
 
 type PickerStatus = 'idle' | 'loading' | 'error' | 'info'
@@ -67,10 +69,7 @@ export default class EagleSearchPickerModal extends Modal {
       }
     })
 
-    this.statusEl = contentEl.createEl('p', {
-      cls: 'eagle-picker-status',
-      text: 'Type a keyword, or #tag, to search Eagle images.',
-    })
+    this.statusEl = contentEl.createEl('p', { cls: 'eagle-picker-status' })
 
     this.gridEl = contentEl.createDiv({ cls: 'eagle-picker-grid' })
     this.gridEl.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -78,6 +77,7 @@ export default class EagleSearchPickerModal extends Modal {
     })
 
     this.keywordInput.inputEl.focus()
+    void this.runSearch()
   }
 
   override onClose(): void {
@@ -128,30 +128,20 @@ export default class EagleSearchPickerModal extends Modal {
   private async runSearch(): Promise<void> {
     const query = this.keywordInput.getValue().trim()
     const { keyword, tags } = parseSearchQuery(query)
-    if (!keyword && tags.length === 0) {
-      this.results = []
-      this.resetThumbnailFallbacks()
-      this.setStatus('Type a keyword, or #tag, to search Eagle images.', 'idle')
-      this.renderGrid()
-      return
-    }
-
+    const recent = !keyword && tags.length === 0
+    const limit = recent ? RECENT_LIMIT : SEARCH_RESULT_LIMIT
     const token = ++this.activeSearchToken
-    this.setStatus('Searching…', 'loading')
-    this.debugLog('search:start', { keyword, tags, limit: SEARCH_RESULT_LIMIT, token })
+    this.setStatus(recent ? 'Loading recent images…' : 'Searching…', 'loading')
+    this.debugLog('search:start', { keyword, tags, limit, token })
 
     this.gridEl.empty()
-    for (let i = 0; i < 6; i++) {
+    const skeletons = this.columnCount() * SKELETON_ROWS
+    for (let i = 0; i < skeletons; i++) {
       this.gridEl.createDiv({ cls: 'eagle-skeleton-card' })
     }
 
     try {
-      const results = await this.uploader.searchItems({
-        keyword,
-        tags,
-        limit: SEARCH_RESULT_LIMIT,
-        orderBy: 'time',
-      })
+      const results = await this.uploader.searchItems({ keyword, tags, limit, orderBy: 'time' })
 
       if (!this.isTokenActive(token)) {
         this.debugLog('search:stale', { token, keyword })
@@ -165,7 +155,9 @@ export default class EagleSearchPickerModal extends Modal {
         keyword,
         count: results.length,
       })
-      if (results.length === 0) {
+      if (recent) {
+        this.setStatus(results.length ? 'Recent images. Type to search.' : 'Your Eagle library is empty.', 'idle')
+      } else if (results.length === 0) {
         this.setStatus(`No results for "${query}".`, 'info')
       } else {
         this.setStatus(`Found ${countLabel(results.length, 'result')}. Select one to insert.`, 'info')
@@ -217,11 +209,11 @@ export default class EagleSearchPickerModal extends Modal {
 
     if (this.results.length === 0) {
       const emptyState = this.gridEl.createDiv({ cls: 'eagle-picker-empty-state' })
-      // The status line already explains a failed search or an empty query.
-      if (this.statusKind !== 'error' && this.statusKind !== 'idle') {
+      // The status line already explains a failed search and an empty library.
+      if (this.statusKind === 'info') {
         emptyState.createEl('p', {
-          text: 'No results.',
-          cls: 'eagle-picker-empty',
+          text: 'Try fewer words, or a different #tag.',
+          cls: 'eagle-picker-empty-hint',
         })
       }
       const actions = emptyState.createDiv({ cls: 'modal-button-container' })
@@ -238,11 +230,8 @@ export default class EagleSearchPickerModal extends Modal {
           .setButtonText('Clear query')
           .onClick(() => {
             this.keywordInput.setValue('')
-            this.results = []
-            this.resetThumbnailFallbacks()
-            this.setStatus('Type a keyword, or #tag, to search Eagle images.', 'idle')
-            this.renderGrid()
             this.keywordInput.inputEl.focus()
+            void this.runSearch()
           })
       }
       return
@@ -253,8 +242,12 @@ export default class EagleSearchPickerModal extends Modal {
     }
   }
 
+  private columnCount(): number {
+    return Math.max(1, getComputedStyle(this.gridEl).gridTemplateColumns.split(' ').length)
+  }
+
   private handleGridArrowNav(e: KeyboardEvent): void {
-    const cols = Math.max(1, Math.round(this.gridEl.offsetWidth / 150))
+    const cols = this.columnCount()
     let delta: number
     switch (e.key) {
       case 'ArrowRight': delta = 1; break
@@ -361,6 +354,8 @@ export default class EagleSearchPickerModal extends Modal {
 
   private showImageMissing(thumbWrapper: HTMLElement, ext?: string): void {
     thumbWrapper.removeClass('is-loading')
+    thumbWrapper.addClass('is-missing')
+    thumbWrapper.setAttr('aria-label', 'No preview')
     thumbWrapper.empty()
     setIcon(thumbWrapper.createSpan({ cls: 'eagle-picker-missing' }), 'image-off')
     this.appendExtBadge(thumbWrapper, ext)

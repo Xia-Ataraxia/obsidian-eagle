@@ -435,8 +435,7 @@ export default class EagleUploader {
     offset = 0,
   }: EagleItemSearchOptions): Promise<EagleItemSearchResult[]> {
     const trimmedKeyword = keyword.trim()
-    if (!trimmedKeyword && tags.length === 0) return []
-
+    // No keyword or tags lists the whole library, newest first with orderBy 'time'.
     const params = new URLSearchParams({ offset: String(offset) })
     if (trimmedKeyword) params.set('keyword', trimmedKeyword)
     if (tags.length > 0) params.set('tags', tags.join(','))
