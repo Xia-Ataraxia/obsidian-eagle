@@ -2,6 +2,7 @@ import { App, ButtonComponent, Modal, TextComponent, setIcon } from 'obsidian'
 
 import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { searchErrorStatus } from '../domain/search-error'
+import { UPLOAD_ANNOTATION } from '../utils/item-naming'
 import { countLabel } from '../utils/plural'
 import { parseSearchQuery } from '../utils/search-query'
 import { nextThumbnailRetry } from '../utils/thumbnail-retry'
@@ -322,7 +323,7 @@ export default class EagleSearchPickerModal extends Modal {
     }
 
     // Annotation (truncated)
-    if (item.annotation) {
+    if (item.annotation && item.annotation !== UPLOAD_ANNOTATION) {
       card.createSpan({
         cls: 'eagle-picker-annotation',
         text: item.annotation.length > 40 ? item.annotation.slice(0, 40) + '\u2026' : item.annotation,

@@ -9,6 +9,7 @@ import { EaglePluginSettings } from '../domain/settings'
 import { type EagleFolderTreeNode, extractResponseMessage, extractSearchItemsData, extractTextMessage, extractThumbnailCandidate, flattenFolderTree, normalizeRequestError, parseCreateFolderResponse, parseFolderList, parseFolderListResponse, parseItemInfoResponse, parseLibraryInfoResponse, parseSearchItemsResponse, parseStringDataResponse } from '../utils/eagle-response-parsers'
 import { selectByTags, tagFetchLimit } from '../utils/search-query'
 import { withTimeout } from '../utils/with-timeout'
+import { UPLOAD_ANNOTATION } from '../utils/item-naming'
 import { raceAbort } from '../utils/race-abort'
 import { PluginLogger } from '../utils/plugin-logger'
 import { safeDisplayName, safeImageExtension } from '../utils/eagle-path-contract'
@@ -170,7 +171,7 @@ export default class EagleUploader {
     const body: EagleAddFromPathRequest = {
       path: filePath,
       name: safeDisplayName(displayName || nameFromPath),
-      annotation: 'Added via Obsidian Eagle Plugin',
+      annotation: UPLOAD_ANNOTATION,
     }
 
     if (folderId) {
