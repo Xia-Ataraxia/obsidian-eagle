@@ -1,6 +1,6 @@
 import 'obsidian'
 
-/* global TextFileView, EditorPosition, Point -- Obsidian internal types not exported from the obsidian module but present at runtime */
+/* global TextFileView, EditorPosition, Point, TFile -- Obsidian internal types not exported from the obsidian module but present at runtime */
 
 /** Minimal subset of Node.js ErrnoException used by the desktop adapter callbacks. */
 export interface NodeErrnoException extends Error {

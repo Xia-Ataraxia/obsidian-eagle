@@ -9,11 +9,12 @@ describe('canvasNodeSizeForImage', () => {
   it('caps tall images by height', () => {
     expect(canvasNodeSizeForImage(1000, 4000)).toEqual({ width: 125, height: 500 })
   })
-  it('upscales small images to the max bound', () => {
-    expect(canvasNodeSizeForImage(40, 20)).toEqual({ width: 400, height: 200 })
+  it('does not upscale past natural size, but keeps a minimum width', () => {
+    expect(canvasNodeSizeForImage(300, 200)).toEqual({ width: 300, height: 200 })
+    expect(canvasNodeSizeForImage(40, 20)).toEqual({ width: 160, height: 80 })
   })
-  it('enforces a minimum side', () => {
-    expect(canvasNodeSizeForImage(4000, 100).height).toBe(80)
+  it('enforces a minimum height', () => {
+    expect(canvasNodeSizeForImage(4000, 100).height).toBe(40)
   })
   it('falls back on invalid dimensions', () => {
     expect(canvasNodeSizeForImage(0, 10)).toEqual({ width: 400, height: 300 })

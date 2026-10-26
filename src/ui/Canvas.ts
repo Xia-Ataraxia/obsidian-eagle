@@ -1,4 +1,4 @@
-import { Canvas } from 'obsidian'
+import { Canvas, Point } from 'obsidian'
 
 import type EaglePlugin from '../main'
 
@@ -62,7 +62,7 @@ async function uploadImageOnCanvas(
 
     modal.close()
     const size = await imageNodeSize(file)
-    canvas.createTextNode({ pos: canvas.posCenter(), size, position: 'center', text: `![eagle:${itemId}](${fileUrl})` })
+    canvas.createTextNode({ pos: nextPastePos(canvas), size, position: 'center', text: `![eagle:${itemId}](${fileUrl})` })
   } catch (err: unknown) {
     modal.close()
     if (err instanceof DOMException && err.name === 'AbortError') {
@@ -71,7 +71,7 @@ async function uploadImageOnCanvas(
     // The clipboard is empty once this handler has awaited, so the original handler cannot recover the image; keep it in the vault.
     plugin.log.warn('Eagle upload failed on canvas, saving locally', { err: err instanceof Error ? err.message : String(err) })
     const saved = await plugin.saveImageLocally(file)
-    canvas.createFileNode({ pos: canvas.posCenter(), size: await imageNodeSize(file), position: 'center', file: saved })
+    canvas.createFileNode({ pos: nextPastePos(canvas), size: await imageNodeSize(file), position: 'center', file: saved })
     plugin.notices.show('saved_locally')
   }
 }
@@ -85,4 +85,17 @@ async function imageNodeSize(file: File) {
   } catch {
     return canvasNodeSizeForImage(0, 0)
   }
+}
+
+const CASCADE_STEP = 28
+const lastPaste = new WeakMap<Canvas, { center: Point; pos: Point }>()
+
+/** Repeated pastes at the same viewport center cascade diagonally instead of stacking. */
+function nextPastePos(canvas: Canvas): Point {
+  const center = canvas.posCenter()
+  const last = lastPaste.get(canvas)
+  const sameView = last && last.center.x === center.x && last.center.y === center.y
+  const pos = sameView ? { x: last.pos.x + CASCADE_STEP, y: last.pos.y + CASCADE_STEP } : center
+  lastPaste.set(canvas, { center, pos })
+  return pos
 }
