@@ -38,6 +38,9 @@ const EAGLE_NOTICE_CATALOG: NoticeCatalog = {
   migrate_none: { template: 'No images to migrate.' },
   migrate_progress: { template: '{{step}}', timeout: 0, immutable: true },
   migrate_done: { template: 'Migrated {{images}} to {{folder}}.{{failureSuffix}}', timeout: 8000 },
+  cache_sync_progress: { template: '{{step}}', timeout: 0, immutable: true },
+  cache_sync_current: { template: 'Cache is already up to date.' },
+  cache_sync_done: { template: 'Cached {{images}}.{{failureSuffix}}', timeout: 8000 },
   import_failed_api: { template: "Couldn't import from Eagle. {{message}}" },
   import_failed: { template: "Couldn't insert the Eagle image." },
   no_active_editor: { template: 'Open a note to upload images.' },
@@ -188,16 +191,16 @@ export default class EaglePlugin extends Plugin {
     this.addUploadLocalCommand()
     this.addImportFromEagleLibraryCommand()
     this.addMigrateAllImagesCommand()
+    this.addSyncCacheCommand()
     this.registerEagleImageRenderer()
     this.app.workspace.onLayoutReady(() => {
-      // file-open for the restored note fired before the plugin loaded.
+      // file-open for the restored note fired before the plugin loaded; restored tabs and popouts get the backfill.
       this.queueFileSync(this.app.workspace.getActiveFile())
+      this.syncOpenNotes()
       this.registerEvent(
         this.app.metadataCache.on('changed', (file, content) => {
           if (file.extension !== 'md') return
-          void this.cacheSync.syncNoteContent(content).catch((err) => {
-            this.log.error('cache sync failed unexpectedly', err)
-          })
+          void this.cacheSync.syncNoteContent(content)
         }),
       )
     })
@@ -224,6 +227,21 @@ export default class EaglePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('file-open', (file) => this.queueFileSync(file)))
 
     this.registerEvent(this.app.workspace.on('editor-menu', this.eaglePluginRightClickHandler))
+  }
+
+  private syncOpenNotes() {
+    const files = new Set<TFile>()
+    // Deferred tabs have no view yet, so read the path from the view state.
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const path = leaf.getViewState().state?.['file']
+      const file = typeof path === 'string' ? this.app.vault.getFileByPath(path) : null
+      if (file?.extension === 'md') files.add(file)
+    })
+    for (const file of files) {
+      void this.app.vault.cachedRead(file).then((content) => this.cacheSync.syncNoteContent(content)).catch((err: unknown) => {
+        this.log.warn('failed to read open note for cache sync', { path: file.path, err })
+      })
+    }
   }
 
   private queueFileSync(file: TFile | null) {
@@ -267,6 +285,16 @@ export default class EaglePlugin extends Plugin {
       name: 'Migrate all images to the cache folder',
       callback: () => {
         void this.imageMigration.migrateAllImages()
+      },
+    })
+  }
+
+  private addSyncCacheCommand() {
+    this.addCommand({
+      id: 'sync-cache-all-notes',
+      name: 'Sync Eagle cache for all notes',
+      callback: () => {
+        void this.cacheSync.syncAllNotes()
       },
     })
   }
