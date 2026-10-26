@@ -103,7 +103,6 @@ export class ImageMigrationService {
 
     // Phase 4: Update vault files atomically, re-reading tokens from the content being written
     let migratedCount = 0
-    const rewritten: TFile[] = []
     for (const file of filesWithOldFormat) {
       const count = await rewriteNote(this.plugin.app.vault, file, (content) =>
         findOldFormatTokens(content).flatMap(({ token, itemId }) => {
@@ -112,15 +111,13 @@ export class ImageMigrationService {
         }),
       )
       migratedCount += count
-      if (count > 0) rewritten.push(file)
       tick('Updating notes…')
     }
 
     if (migratedCount > 0) {
-      // Migrated links carry no display name yet; syncing each rewritten note renames them.
+      // Migrated links carry no display name yet; "Sync Eagle cache for all notes" renames them.
       this.plugin.settings.legacyCacheNamesMigrated = false
       await this.plugin.saveSettings()
-      for (const file of rewritten) void this.plugin.cacheSync.syncNote(file)
     }
 
     let failureSuffix = ''

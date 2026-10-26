@@ -411,9 +411,9 @@ export default class EagleUploader {
   }
 
   /**
-   * Returns `true` if the item exists and is not deleted, `false` if confirmed absent,
-   * or `null` if the check failed (Eagle unreachable, network error, server error).
-   * Callers must NOT evict cached files when this returns `null`.
+   * Returns `true` if the item exists and is not deleted, `false` if confirmed absent, or `null` if
+   * Eagle answered with an error or a response it couldn't parse. Throws `EagleUnreachableError`
+   * when Eagle doesn't answer. Callers must NOT evict cached files unless this returns `false`.
    */
   async itemExists(itemId: string): Promise<boolean | null> {
     try {
@@ -422,7 +422,7 @@ export default class EagleUploader {
       const data = parseItemInfoResponse(await this.requestJson(url, 'GET'))
       return data.status === 'success' && !data.data?.isDeleted
     } catch (err) {
-       
+      if (err instanceof EagleUnreachableError) throw err
       this.log.debug('itemExists check failed — treating as uncertain', { itemId, err: String(err) })
       return null
     }

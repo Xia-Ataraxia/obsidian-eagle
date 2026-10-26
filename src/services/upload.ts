@@ -40,8 +40,20 @@ interface NoteTarget {
   file: TFile
 }
 
+interface UploadedItem {
+  markdownImage: string
+  itemId: string
+}
+
 export class UploadService {
   constructor(private readonly plugin: EaglePlugin) {}
+
+  // Items whose cache file this service is still writing; cache sync leaves them alone until the embed lands.
+  private readonly inFlightItemIds = new Set<string>()
+
+  isUploading(itemId: string): boolean {
+    return this.inFlightItemIds.has(itemId)
+  }
 
   handleImageFiles(files: FileList, e: Event): void {
     if (!allFilesAreImages(files)) return
@@ -156,10 +168,12 @@ export class UploadService {
     const removePlaceholder = () => this.replaceInNote(target, placeholder, '')
     controller.signal.addEventListener('abort', () => void removePlaceholder(), { once: true })
 
+    let itemId: string | undefined
     try {
-      const markdownImage = await this.uploadToEagle(file, target, controller.signal)
-      await this.replaceInNote(target, progressText, markdownImage)
-      return markdownImage
+      const uploaded = await this.uploadToEagle(file, target, controller.signal)
+      itemId = uploaded.itemId
+      await this.replaceInNote(target, progressText, uploaded.markdownImage)
+      return uploaded.markdownImage
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return
       // Pasted/dropped images exist nowhere else; keep them in the vault rather than losing them.
@@ -182,11 +196,12 @@ export class UploadService {
       })
       return
     } finally {
+      if (itemId) this.inFlightItemIds.delete(itemId)
       progress.finish(controller)
     }
   }
 
-  private async uploadToEagle(file: File, target: NoteTarget, signal: AbortSignal): Promise<string> {
+  private async uploadToEagle(file: File, target: NoteTarget, signal: AbortSignal): Promise<UploadedItem> {
     const folderName = this.resolveTargetEagleFolderForActiveFile()
     const normalizedFile = await normalizeImageForUpload(file)
     const originalName = file.name.replace(/\.[^.]+$/, '')
@@ -210,6 +225,7 @@ export class UploadService {
     }
 
     const { itemId, fileUrl, ext } = await this.plugin.eagleUploader.upload(normalizedFile, { folderName, signal, displayName })
+    this.inFlightItemIds.add(itemId)
 
     if (fileUrl.startsWith('file://')) {
       await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
@@ -225,11 +241,11 @@ export class UploadService {
       })
     }
 
-    return this.markdownImageFor(itemId, ext, displayName)
+    return { markdownImage: this.markdownImageFor(itemId, ext, displayName), itemId }
   }
 
   /** Returns the embed for a previously uploaded item, or null when Eagle no longer has it (hash evicted, caller re-uploads). */
-  private async reuseExistingItem(hash: string, existing: { itemId: string; displayName: string }, signal: AbortSignal): Promise<string | null> {
+  private async reuseExistingItem(hash: string, existing: { itemId: string; displayName: string }, signal: AbortSignal): Promise<UploadedItem | null> {
     const { itemId, displayName } = existing
     let fileUrl: string
     try {
@@ -245,11 +261,12 @@ export class UploadService {
       return null
     }
     this.plugin.notices.show('duplicate_detected')
+    this.inFlightItemIds.add(itemId)
     const ext = extractFileExtension(fileUrl) || 'jpg'
     await this.plugin.cacheManager.cacheFromOsPath(itemId, ext, fileUrlToOsPath(fileUrl), displayName).catch((e: unknown) => {
       this.plugin.log.warn('cache write failed — image may appear broken', { err: e instanceof Error ? e.message : String(e) })
     })
-    return this.markdownImageFor(itemId, ext, displayName)
+    return { markdownImage: this.markdownImageFor(itemId, ext, displayName), itemId }
   }
 
   async saveAsLocalAttachment(file: File, sourcePath = this.activeSourcePath()): Promise<string> {

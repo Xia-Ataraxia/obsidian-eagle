@@ -6,6 +6,8 @@ import {
   Notice,
   Plugin,
   TFile,
+  debounce,
+  type Debouncer,
 } from 'obsidian'
 
 import EagleApiError from './domain/EagleApiError'
@@ -101,9 +103,11 @@ export default class EaglePlugin extends Plugin {
     delayMs: 500,
     onRun: async () => {
       const file = this._pendingSyncFile
-      if (file) await this.cacheSync.syncOpenedFile(file)
+      if (file) await this.cacheSync.syncNote(file, true)
     },
   })
+  // Per note, so typing or a burst of saves syncs once after the edits settle.
+  private readonly changeSyncs = new Map<string, Debouncer<[TFile], void>>()
 
   private customPasteEventCallback = (e: ClipboardEvent) => {
     if (e.clipboardData) this.uploads.handleImageFiles(e.clipboardData.files, e)
@@ -167,6 +171,7 @@ export default class EaglePlugin extends Plugin {
     const notices: PluginNotices | undefined = this.notices
     notices?.unload()
     this.syncDebounce.dispose()
+    for (const sync of this.changeSyncs.values()) sync.cancel()
   }
 
   private async initPlugin() {
@@ -194,8 +199,8 @@ export default class EaglePlugin extends Plugin {
       this.registerEvent(
         this.app.metadataCache.on('changed', (file, content) => {
           // Bulk external changes (git pull, sync) must not queue Eagle calls for notes nobody is viewing.
-          if (file.extension !== 'md' || !this.openNotePaths().has(file.path)) return
-          void this.cacheSync.syncNote(file, content)
+          if (file.extension !== 'md' || this.cacheSync.isOwnWrite(file.path, content) || !this.openNotePaths().has(file.path)) return
+          this.changeSyncFor(file.path)(file)
         }),
       )
     })
@@ -239,6 +244,19 @@ export default class EaglePlugin extends Plugin {
       const file = this.app.vault.getFileByPath(path)
       if (file) void this.cacheSync.syncNote(file)
     }
+  }
+
+  private changeSyncFor(path: string): Debouncer<[TFile], void> {
+    let sync = this.changeSyncs.get(path)
+    if (!sync) {
+      sync = debounce((file: TFile) => void this.cacheSync.syncNote(file), 1500, true)
+      this.changeSyncs.set(path, sync)
+    }
+    return sync
+  }
+
+  isUploading(itemId: string): boolean {
+    return this.uploads.isUploading(itemId)
   }
 
   private queueFileSync(file: TFile | null) {
