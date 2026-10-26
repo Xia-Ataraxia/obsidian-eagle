@@ -13,7 +13,6 @@ import {
 import EagleApiError from './domain/EagleApiError'
 import { sanitizeFolderMappings } from './domain/folder-mapping'
 import { EaglePluginSettings, settingsForPersist, settingsFromSavedData } from './domain/settings'
-import { DebounceController } from './utils/debounce-controller'
 import { PluginLogger } from './utils/plugin-logger'
 import { NoticeCatalog, PluginNotices } from './ui/plugin-notices'
 import { createEagleCanvasPasteHandler } from './ui/Canvas'
@@ -98,14 +97,7 @@ export default class EaglePlugin extends Plugin {
   readonly uploadProgress = new UploadProgress(() => this.notices)
   readonly cacheSync = new CacheSyncService(this)
   private readonly imageMigration = new ImageMigrationService(this)
-  private _pendingSyncFile: TFile | null = null
-  private readonly syncDebounce = new DebounceController({
-    delayMs: 500,
-    onRun: async () => {
-      const file = this._pendingSyncFile
-      if (file) await this.cacheSync.syncNote(file, true)
-    },
-  })
+  private readonly fileOpenSync = debounce((file: TFile) => void this.cacheSync.syncNote(file, true), 500, true)
   // Per note, so typing or a burst of saves syncs once after the edits settle.
   private readonly changeSyncs = new Map<string, Debouncer<[TFile], void>>()
 
@@ -170,8 +162,9 @@ export default class EaglePlugin extends Plugin {
     // initPlugin awaits loadData first, so unload can run before notices exist.
     const notices: PluginNotices | undefined = this.notices
     notices?.unload()
-    this.syncDebounce.dispose()
+    this.fileOpenSync.cancel()
     for (const sync of this.changeSyncs.values()) sync.cancel()
+    this.cacheSync.dispose()
   }
 
   private async initPlugin() {
@@ -194,7 +187,6 @@ export default class EaglePlugin extends Plugin {
     this.registerEagleImageRenderer()
     this.app.workspace.onLayoutReady(() => {
       // file-open for the restored note fired before the plugin loaded; restored tabs and popouts get the backfill.
-      this.queueFileSync(this.app.workspace.getActiveFile())
       this.syncOpenNotes()
       this.registerEvent(
         this.app.metadataCache.on('changed', (file, content) => {
@@ -224,7 +216,11 @@ export default class EaglePlugin extends Plugin {
         }
       }),
     )
-    this.registerEvent(this.app.workspace.on('file-open', (file) => this.queueFileSync(file)))
+    this.registerEvent(this.app.workspace.on('file-open', (file) => {
+      if (file?.extension === 'md') this.fileOpenSync(file)
+    }))
+    this.registerEvent(this.app.vault.on('delete', (file) => this.dropChangeSync(file.path)))
+    this.registerEvent(this.app.vault.on('rename', (_file, oldPath) => this.dropChangeSync(oldPath)))
 
     this.registerEvent(this.app.workspace.on('editor-menu', this.eaglePluginRightClickHandler))
   }
@@ -240,29 +236,32 @@ export default class EaglePlugin extends Plugin {
   }
 
   private syncOpenNotes() {
+    const active = this.app.workspace.getActiveFile()?.path
     for (const path of this.openNotePaths()) {
       const file = this.app.vault.getFileByPath(path)
-      if (file) void this.cacheSync.syncNote(file)
+      if (file) void this.cacheSync.syncNote(file, path === active)
     }
   }
 
   private changeSyncFor(path: string): Debouncer<[TFile], void> {
     let sync = this.changeSyncs.get(path)
     if (!sync) {
-      sync = debounce((file: TFile) => void this.cacheSync.syncNote(file), 1500, true)
+      sync = debounce((file: TFile) => {
+        this.changeSyncs.delete(path)
+        void this.cacheSync.syncNote(file)
+      }, 1500, true)
       this.changeSyncs.set(path, sync)
     }
     return sync
   }
 
-  isUploading(itemId: string): boolean {
-    return this.uploads.isUploading(itemId)
+  private dropChangeSync(path: string) {
+    this.changeSyncs.get(path)?.cancel()
+    this.changeSyncs.delete(path)
   }
 
-  private queueFileSync(file: TFile | null) {
-    if (file?.extension !== 'md') return
-    this._pendingSyncFile = file
-    this.syncDebounce.markDirty()
+  isUploading(itemId: string): boolean {
+    return this.uploads.isUploading(itemId)
   }
 
   private readonly wrappedCanvasViews = new WeakSet<CanvasView>()

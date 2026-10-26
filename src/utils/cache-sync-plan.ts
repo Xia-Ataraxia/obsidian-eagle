@@ -1,12 +1,13 @@
-import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
+import EagleApiError, { EagleNotFoundError, EagleUnreachableError } from '../domain/EagleApiError'
 import type { WikilinkEmbedToken } from './markdown-image'
 
 /**
  * present: already on disk. cached: copied now. skipped: Eagle has no local file for it.
- * missing: Eagle doesn't know the item. unreachable: Eagle didn't answer. failed: anything else.
+ * missing: Eagle confirmed it has no such item. unreachable: Eagle didn't answer.
+ * error: Eagle answered with another error (e.g. while switching libraries). failed: anything else.
  * uploading: an upload in flight is writing it; the next sync looks again.
  */
-export type ItemOutcome = 'present' | 'cached' | 'skipped' | 'missing' | 'unreachable' | 'failed' | 'uploading'
+export type ItemOutcome = 'present' | 'cached' | 'skipped' | 'missing' | 'unreachable' | 'error' | 'failed' | 'uploading'
 
 export interface CacheSyncPlan {
   /** One token per named item not yet checked this session. */
@@ -31,14 +32,15 @@ export function planCacheSync(tokens: WikilinkEmbedToken[], checked: ReadonlySet
   return plan
 }
 
-export function outcomeForError(err: unknown): 'missing' | 'unreachable' | 'failed' {
+export function outcomeForError(err: unknown): 'missing' | 'unreachable' | 'error' | 'failed' {
   if (err instanceof EagleUnreachableError) return 'unreachable'
-  return err instanceof EagleApiError ? 'missing' : 'failed'
+  if (err instanceof EagleNotFoundError) return 'missing'
+  return err instanceof EagleApiError ? 'error' : 'failed'
 }
 
-/** Items Eagle didn't answer for, or an upload is still writing, are retried; everything else is settled for the session. */
+/** Items Eagle didn't answer for, answered with an error, or an upload is still writing are retried; the rest are settled for the session. */
 export function marksChecked(outcome: ItemOutcome): boolean {
-  return outcome !== 'unreachable' && outcome !== 'uploading'
+  return outcome !== 'unreachable' && outcome !== 'error' && outcome !== 'uploading'
 }
 
 /**
@@ -47,8 +49,15 @@ export function marksChecked(outcome: ItemOutcome): boolean {
  */
 export function legacyMigrationComplete(outcomes: Iterable<ItemOutcome>, linkFailures: number): boolean {
   if (linkFailures > 0) return false
-  for (const outcome of outcomes) if (outcome === 'unreachable' || outcome === 'failed') return false
+  for (const outcome of outcomes) if (outcome === 'unreachable' || outcome === 'error' || outcome === 'failed') return false
   return true
+}
+
+/** Cheap stand-in for a note's content, enough to recognise the plugin's own write. */
+export function contentFingerprint(content: string): string {
+  let hash = 0
+  for (let i = 0; i < content.length; i++) hash = (Math.imul(hash, 31) + content.charCodeAt(i)) | 0
+  return `${content.length}:${hash}`
 }
 
 export const PROGRESS_INTERVAL_MS = 250

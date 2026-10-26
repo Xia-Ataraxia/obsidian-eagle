@@ -33,6 +33,11 @@ export function extractResponseMessage(payload: unknown): string {
   return ''
 }
 
+/** Eagle's answer for an unknown item id: HTTP 500 with `{"status":"error","data":"File does not exist."}`. */
+export function isNotFoundResponse(payload: unknown): boolean {
+  return isObjectRecord(payload) && payload['status'] === 'error' && payload['data'] === 'File does not exist.'
+}
+
 export function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object'
 }

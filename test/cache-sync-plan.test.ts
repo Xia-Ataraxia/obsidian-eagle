@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import EagleApiError, { EagleUnreachableError } from '../src/domain/EagleApiError'
-import { legacyMigrationComplete, marksChecked, outcomeForError, planCacheSync, shouldReportProgress } from '../src/utils/cache-sync-plan'
+import EagleApiError, { EagleNotFoundError, EagleUnreachableError } from '../src/domain/EagleApiError'
+import { contentFingerprint, legacyMigrationComplete, marksChecked, outcomeForError, planCacheSync, shouldReportProgress } from '../src/utils/cache-sync-plan'
 import { findEagleWikilinkTokens } from '../src/utils/markdown-image'
 
 const tokens = (md: string) => findEagleWikilinkTokens(md, 'eagle-cache')
@@ -29,13 +29,15 @@ describe(planCacheSync, () => {
 describe('item outcomes', () => {
   it('tells an unreachable Eagle apart from an item Eagle rejects', () => {
     expect(outcomeForError(new EagleUnreachableError('ECONNREFUSED'))).toBe('unreachable')
-    expect(outcomeForError(new EagleApiError('404 Not Found'))).toBe('missing')
+    expect(outcomeForError(new EagleNotFoundError('no such item'))).toBe('missing')
+    expect(outcomeForError(new EagleApiError('500 library is switching'))).toBe('error')
     expect(outcomeForError(new Error('EACCES'))).toBe('failed')
   })
 
   it('leaves unreachable and uploading items unchecked, so they are retried', () => {
     expect(marksChecked('unreachable')).toBe(false)
     expect(marksChecked('uploading')).toBe(false)
+    expect(marksChecked('error')).toBe(false)
     for (const outcome of ['present', 'cached', 'skipped', 'missing', 'failed'] as const) expect(marksChecked(outcome)).toBe(true)
   })
 })
@@ -46,6 +48,7 @@ describe(legacyMigrationComplete, () => {
     expect(legacyMigrationComplete(['missing'], 0)).toBe(true)
     expect(legacyMigrationComplete(['missing', 'unreachable'], 0)).toBe(false)
     expect(legacyMigrationComplete(['failed'], 0)).toBe(false)
+    expect(legacyMigrationComplete(['error'], 0)).toBe(false)
   })
 
   it('stays unmigrated while any link could not be rewritten', () => {
@@ -59,5 +62,13 @@ describe(shouldReportProgress, () => {
     expect(shouldReportProgress(25, 100, 1000, 1100)).toBe(true)
     expect(shouldReportProgress(3, 100, 1000, 1250)).toBe(true)
     expect(shouldReportProgress(100, 100, 1000, 1001)).toBe(true)
+  })
+})
+
+describe(contentFingerprint, () => {
+  it('matches equal content and tells edits apart', () => {
+    expect(contentFingerprint('![[a.png]]')).toBe(contentFingerprint('![[a.png]]'))
+    expect(contentFingerprint('![[a.png]]')).not.toBe(contentFingerprint('![[b.png]]'))
+    expect(contentFingerprint('ab')).not.toBe(contentFingerprint('abc'))
   })
 })

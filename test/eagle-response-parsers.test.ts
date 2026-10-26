@@ -4,6 +4,7 @@ import EagleApiError from '../src/domain/EagleApiError'
 import {
   extractResponseMessage,
   flattenFolderTree,
+  isNotFoundResponse,
   parseFolderList,
   parseStringDataResponse,
 } from '../src/utils/eagle-response-parsers'
@@ -44,5 +45,14 @@ describe('folder tree', () => {
 
   it('rejects malformed nodes', () => {
     expect(() => parseFolderList([{ id: 1, name: 'x' }])).toThrow(EagleApiError)
+  })
+})
+
+describe('isNotFoundResponse', () => {
+  it("matches only Eagle's unknown-item answer", () => {
+    expect(isNotFoundResponse({ status: 'error', data: 'File does not exist.' })).toBe(true)
+    expect(isNotFoundResponse({ status: 'error', data: 'Library is loading.' })).toBe(false)
+    expect(isNotFoundResponse({ status: 'error', message: 'Internal Server Error' })).toBe(false)
+    expect(isNotFoundResponse(null)).toBe(false)
   })
 })

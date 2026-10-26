@@ -3,7 +3,7 @@ import type { TFile } from 'obsidian'
 import type EaglePlugin from '../main'
 
 import { wikilinkForCacheItem } from '../utils/eagle-path-contract'
-import { legacyMigrationComplete, marksChecked, outcomeForError, planCacheSync, shouldReportProgress, type ItemOutcome } from '../utils/cache-sync-plan'
+import { contentFingerprint, legacyMigrationComplete, marksChecked, outcomeForError, planCacheSync, shouldReportProgress, type ItemOutcome } from '../utils/cache-sync-plan'
 import { countLabel } from '../utils/plural'
 import { findEagleWikilinkTokens, type WikilinkEmbedToken } from '../utils/markdown-image'
 import { fileUrlToOsPath } from '../ui/file-url'
@@ -19,6 +19,10 @@ interface Tally {
   /** Links to renamed items that couldn't be rewritten. */
   linkFailures: number
   unreadable: number
+  /** Legacy items left under their old name because a canvas file references them. */
+  canvasKept: number
+  /** Renames were skipped because some files couldn't be read. */
+  renamesSkipped: boolean
 }
 
 interface LegacyNote {
@@ -27,11 +31,12 @@ interface LegacyNote {
   itemIds: string[]
 }
 
-const newTally = (): Tally => ({ outcomes: new Map(), legacy: [], linkFailures: 0, unreadable: 0 })
+const newTally = (): Tally => ({ outcomes: new Map(), legacy: [], linkFailures: 0, unreadable: 0, canvasKept: 0, renamesSkipped: false })
 
 /**
  * Passive syncs (open notes, file-open, edits) only backfill the note at hand, under the filenames its
  * links already use. Renaming legacy cache files rewrites other notes, so only the explicit command does it.
+ * The command runs beside the passive queue, so opening or editing a note never waits on it.
  */
 export class CacheSyncService {
   constructor(private readonly plugin: EaglePlugin) {}
@@ -41,10 +46,21 @@ export class CacheSyncService {
   private readonly confirmedItems = new Set<string>()
   // Note syncs run one at a time so a bulk external sync can't flood the Eagle API.
   private queue: Promise<void> = Promise.resolve()
+  private commandRun: Promise<void> | null = null
+  // While the command renames, passive syncs leave legacy links alone so they never fetch a file it is moving.
+  private migrationRunning = false
   // While Eagle is down, syncs make no API calls until this passes, so typing stays free.
   private eagleUnreachableUntil = 0
-  // Content this plugin last wrote per note, so its own rewrite doesn't trigger a sync.
+  // Notes skipped while Eagle was down, retried once when the window ends (path -> evict).
+  private readonly deferred = new Map<string, boolean>()
+  private retryTimer: number | null = null
+  // Fingerprint of what the command last wrote per note, so its own rewrite doesn't trigger a sync.
   private readonly ownWrites = new Map<string, string>()
+
+  dispose(): void {
+    if (this.retryTimer !== null) window.clearTimeout(this.retryTimer)
+    this.retryTimer = null
+  }
 
   private enqueue(task: () => Promise<void>): Promise<void> {
     this.queue = this.queue.then(task).catch((err) => this.plugin.log.error('cache sync failed unexpectedly', err))
@@ -57,82 +73,152 @@ export class CacheSyncService {
 
   /** True once for the change event carrying content this plugin wrote. */
   isOwnWrite(path: string, content: string): boolean {
-    if (this.ownWrites.get(path) !== content) return false
+    const written = this.ownWrites.get(path)
+    if (written === undefined || written !== contentFingerprint(content)) return false
     this.ownWrites.delete(path)
     return true
   }
 
   /** Backfills one note from its current content; `evict` also drops cache files of items deleted from Eagle. */
-  syncNote(file: TFile, evict = false): Promise<void> {
+  syncNote(file: TFile, evict = false, isRetry = false): Promise<void> {
     return this.enqueue(async () => {
       const { vault } = this.plugin.app
       if (vault.getFileByPath(file.path) !== file) return
       const content = await vault.cachedRead(file)
-      const { items } = this.plan(content, false)
-      await this.backfillAll(items, newTally())
+      const items = this.plan(content, false).items.filter((t) => !this.migrationRunning || t.displayName !== undefined)
+      const tally = newTally()
+      await this.backfillAll(items, tally)
       if (evict && !this.isBackingOff()) await this.evictDeleted(file, content)
+      const skipped = [...tally.outcomes.values()].includes('unreachable') || (evict && this.isBackingOff())
+      if (skipped && !isRetry) this.deferRetry(file.path, evict)
     })
+  }
+
+  /** One timer for every note skipped during the window; each is retried once, later events retry again. */
+  private deferRetry(path: string, evict: boolean): void {
+    this.deferred.set(path, evict || (this.deferred.get(path) ?? false))
+    if (this.retryTimer !== null) return
+    this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = null
+      const due = [...this.deferred]
+      this.deferred.clear()
+      for (const [notePath, evictNote] of due) {
+        const file = this.plugin.app.vault.getFileByPath(notePath)
+        if (file) void this.syncNote(file, evictNote, true)
+      }
+    }, Math.max(0, this.eagleUnreachableUntil - Date.now()) + 100)
   }
 
   /** Explicit command: re-checks every note's links and renames legacy cache files vault-wide, with progress. */
   syncAllNotes(): Promise<void> {
-    const { notices, log } = this.plugin
-    // A fresh session starts at invocation, so syncs already queued behind the command re-check too.
+    if (this.commandRun) return this.commandRun
+    // A fresh session starts at invocation, so passive syncs re-check too.
     this.checkedItems.clear()
     this.confirmedItems.clear()
     this.eagleUnreachableUntil = 0
-    return this.enqueue(async () => {
-      const renameLegacy = !this.plugin.settings.legacyCacheNamesMigrated
-      const files = this.plugin.app.vault.getMarkdownFiles()
-      const tally = newTally()
-      const legacyNotes: LegacyNote[] = []
-      const legacyItems = new Map<string, WikilinkEmbedToken>()
-      let lastReportAt = 0
-      const report = (step: string, done: number, total: number) => notices.show('cache_sync_progress', { step }, { progress: { done, total } })
-      report('Checking notes for images…', 0, files.length)
-      try {
-        for (const [i, file] of files.entries()) {
-          try {
-            const tokens = findEagleWikilinkTokens(await this.plugin.app.vault.cachedRead(file), this.plugin.cacheManager.cacheFolder)
-            const { items, legacy } = planCacheSync(tokens, this.checkedItems, renameLegacy)
-            if (legacy.length > 0) {
-              for (const token of legacy) legacyItems.set(token.itemId, token)
-              legacyNotes.push({ file, itemIds: tokens.filter((t) => t.displayName === undefined).map((t) => t.itemId) })
-            }
-            await this.backfillAll(items, tally)
-          } catch (err) {
-            tally.unreadable++
-            log.warn('cache sync skipped a note', { path: file.path, err })
-          }
-          const now = Date.now()
-          if (shouldReportProgress(i + 1, files.length, lastReportAt, now)) {
-            report('Checking notes for images…', i + 1, files.length)
-            lastReportAt = now
-          }
-        }
-        if (legacyItems.size > 0) {
-          report('Renaming cached images…', 0, legacyItems.size)
-          await this.renameLegacy(legacyItems, legacyNotes, tally)
-        }
-        if (renameLegacy && tally.unreadable === 0 && legacyMigrationComplete(tally.legacy, tally.linkFailures)) {
-          this.plugin.settings.legacyCacheNamesMigrated = true
-          await this.plugin.saveSettings()
-        }
-      } finally {
-        notices.remove('cache_sync_progress')
-        this.showSummary(tally)
-      }
-    })
+    this.commandRun = this.runCommand()
+      .catch((err) => this.plugin.log.error('cache sync failed unexpectedly', err))
+      .finally(() => {
+        this.commandRun = null
+      })
+    return this.commandRun
   }
 
-  private showSummary({ outcomes, linkFailures, unreadable }: Tally): void {
+  private async runCommand(): Promise<void> {
+    const { app, cacheManager, notices, log } = this.plugin
+    const renameLegacy = !this.plugin.settings.legacyCacheNamesMigrated
+    const files = app.vault.getMarkdownFiles()
+    const tally = newTally()
+    const legacyNotes: LegacyNote[] = []
+    const legacyItems = new Map<string, WikilinkEmbedToken>()
+    let lastReportAt = 0
+    const report = (step: string, done: number, total: number) => notices.show('cache_sync_progress', { step }, { progress: { done, total } })
+    report('Checking notes for images…', 0, files.length)
+    this.migrationRunning = renameLegacy
+    try {
+      for (const [i, file] of files.entries()) {
+        try {
+          const tokens = findEagleWikilinkTokens(await app.vault.cachedRead(file), cacheManager.cacheFolder)
+          const { items, legacy } = planCacheSync(tokens, this.checkedItems, renameLegacy)
+          if (legacy.length > 0) {
+            for (const token of legacy) legacyItems.set(token.itemId, token)
+            legacyNotes.push({ file, itemIds: tokens.filter((t) => t.displayName === undefined).map((t) => t.itemId) })
+          }
+          await this.backfillAll(items, tally)
+        } catch (err) {
+          tally.unreadable++
+          log.warn('cache sync skipped a note', { path: file.path, err })
+        }
+        const now = Date.now()
+        if (shouldReportProgress(i + 1, files.length, lastReportAt, now)) {
+          report('Checking notes for images…', i + 1, files.length)
+          lastReportAt = now
+        }
+      }
+      if (legacyItems.size > 0) {
+        // Canvases are only searched for references, never rewritten; a referenced file keeps its name.
+        const kept = tally.unreadable === 0 ? await this.takeCanvasReferenced(legacyItems, tally) : []
+        if (tally.unreadable > 0) {
+          tally.renamesSkipped = true
+          kept.push(...legacyItems.values())
+          legacyItems.clear()
+        }
+        await this.backfillAll(kept.filter((t) => !this.checkedItems.has(t.itemId)), tally)
+      }
+      if (legacyItems.size > 0) {
+        report('Renaming cached images…', 0, legacyItems.size)
+        await this.renameLegacy(legacyItems, legacyNotes, tally)
+      }
+      if (renameLegacy && tally.unreadable === 0 && tally.canvasKept === 0 && legacyMigrationComplete(tally.legacy, tally.linkFailures)) {
+        this.plugin.settings.legacyCacheNamesMigrated = true
+        await this.plugin.saveSettings()
+      }
+    } finally {
+      this.migrationRunning = false
+      this.ownWrites.clear()
+      notices.remove('cache_sync_progress')
+      this.showSummary(tally)
+    }
+  }
+
+  /** Removes legacy items a canvas file references from `legacyItems` and returns them. */
+  private async takeCanvasReferenced(legacyItems: Map<string, WikilinkEmbedToken>, tally: Tally): Promise<WikilinkEmbedToken[]> {
+    const { app, cacheManager, log } = this.plugin
+    const canvases: string[] = []
+    for (const file of app.vault.getFiles()) {
+      if (file.extension !== 'canvas') continue
+      try {
+        canvases.push(await app.vault.cachedRead(file))
+      } catch (err) {
+        tally.unreadable++
+        log.warn('cache sync skipped a canvas', { path: file.path, err })
+      }
+    }
+    const kept: WikilinkEmbedToken[] = []
+    for (const token of legacyItems.values()) {
+      const path = cacheManager.cachedVaultPath(token.itemId, token.ext)
+      if (canvases.some((canvas) => canvas.includes(path))) kept.push(token)
+    }
+    for (const token of kept) legacyItems.delete(token.itemId)
+    tally.canvasKept = kept.length
+    return kept
+  }
+
+  private showSummary({ outcomes, linkFailures, unreadable, canvasKept, renamesSkipped }: Tally): void {
     const counts = { cached: 0, unreachable: 0, failed: 0 }
-    for (const outcome of outcomes.values()) if (outcome in counts) counts[outcome as keyof typeof counts]++
+    for (const outcome of outcomes.values()) {
+      // An Eagle error (e.g. while it switches libraries) reads like an unreachable Eagle to the user.
+      const key = outcome === 'error' ? 'unreachable' : outcome
+      if (key in counts) counts[key as keyof typeof counts]++
+    }
+    const isAre = canvasKept === 1 ? 'is' : 'are'
+    const wasWere = canvasKept === 1 ? 'was' : 'were'
     const failures = [
       counts.unreachable > 0 ? `${countLabel(counts.unreachable, 'image')} couldn't be fetched. Make sure Eagle is open.` : '',
       counts.failed > 0 ? `${countLabel(counts.failed, 'image')} couldn't be copied.` : '',
       linkFailures > 0 ? `${countLabel(linkFailures, 'link')} couldn't be updated.` : '',
-      unreadable > 0 ? `${countLabel(unreadable, 'note')} couldn't be read.` : '',
+      unreadable > 0 ? `${countLabel(unreadable, 'note')} couldn't be read${renamesSkipped ? ', so cache files kept their old names' : ''}.` : '',
+      canvasKept > 0 ? `${countLabel(canvasKept, 'image')} ${isAre} used in canvas files and ${wasWere} left in place.` : '',
     ].filter(Boolean)
     if (counts.cached === 0 && failures.length === 0) {
       this.plugin.notices.show('cache_sync_current')
@@ -218,7 +304,7 @@ export class CacheSyncService {
             findEagleWikilinkTokens(content, cacheFolder)
               .filter((t) => t.displayName === undefined && names.has(t.itemId))
               .map((t) => ({ start: t.start, end: t.end, text: wikilinkForCacheItem(cacheFolder, t.itemId, t.ext, names.get(t.itemId) ?? '', t.alias) })),
-          (written) => this.ownWrites.set(file.path, written),
+          (written) => this.ownWrites.set(file.path, contentFingerprint(written)),
         )
       } catch (err) {
         log.error('cache migration link rewrite failed', { path: file.path, err })
