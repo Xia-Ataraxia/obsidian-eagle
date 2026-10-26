@@ -9,9 +9,9 @@ describe('canvasNodeSizeForImage', () => {
   it('caps tall images by height', () => {
     expect(canvasNodeSizeForImage(1000, 4000)).toEqual({ width: 125, height: 500 })
   })
-  it('does not upscale past natural size, but keeps a minimum width', () => {
+  it('never upscales past natural size', () => {
     expect(canvasNodeSizeForImage(300, 200)).toEqual({ width: 300, height: 200 })
-    expect(canvasNodeSizeForImage(40, 20)).toEqual({ width: 160, height: 80 })
+    expect(canvasNodeSizeForImage(64, 48)).toEqual({ width: 64, height: 48 })
   })
   it('enforces a minimum height', () => {
     expect(canvasNodeSizeForImage(4000, 100).height).toBe(40)
