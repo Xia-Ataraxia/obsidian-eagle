@@ -123,6 +123,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
         },
         onDelete: (index) => {
           this.plugin.settings.folderMappings.splice(index, 1)
+          void this.plugin.saveSettings()
           this.update()
         },
         items: this.plugin.settings.folderMappings.map((mapping, index) => ({
