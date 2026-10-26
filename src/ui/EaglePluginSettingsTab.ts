@@ -113,7 +113,7 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
       },
       {
         type: 'list',
-        heading: 'Folder mapping (Obsidian → eagle)',
+        heading: 'Folder mapping (Obsidian → Eagle)',
         emptyState: 'No mappings yet. Add one to route specific Obsidian folders to Eagle folders.',
         addItem: {
           name: 'Add mapping',
@@ -126,8 +126,8 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
           this.plugin.settings.folderMappings.splice(index, 1)
           this.update()
         },
-        items: this.plugin.settings.folderMappings.map((mapping) => ({
-          name: 'Folder mapping',
+        items: this.plugin.settings.folderMappings.map((mapping, index) => ({
+          name: `Folder mapping ${index + 1}`,
           render: (setting: Setting) => this.renderFolderMappingRow(setting, mapping),
         })),
       },
@@ -419,6 +419,8 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
     const removed = before - this.plugin.settings.folderMappings.length
     if (removed > 0) {
       new Notice(`Eagle: removed ${countLabel(removed, 'incomplete folder mapping')}`)
+      // Rows rendered before the prune would otherwise stay on screen and shift onDelete indexes onto real mappings.
+      this.update()
     }
     void this.plugin.saveSettings()
 

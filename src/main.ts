@@ -10,7 +10,7 @@ import {
 
 import EagleApiError from './domain/EagleApiError'
 import { sanitizeFolderMappings } from './domain/folder-mapping'
-import { EaglePluginSettings, settingsFromSavedData } from './domain/settings'
+import { EaglePluginSettings, settingsForPersist, settingsFromSavedData } from './domain/settings'
 import { DebounceController } from './utils/debounce-controller'
 import { PluginLogger } from './utils/plugin-logger'
 import { NoticeCatalog, PluginNotices } from './ui/plugin-notices'
@@ -142,9 +142,8 @@ export default class EaglePlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
-    this.settings.folderMappings = sanitizeFolderMappings(this.settings.folderMappings ?? [])
     this.settings.cacheFolderName = safeCacheFolderPath(this.settings.cacheFolderName)
-    await this.mergeData(() => ({ ...this.settings }))
+    await this.mergeData(() => settingsForPersist(this.settings))
   }
 
   /** The only path to data.json; settings and the hash store both write through it. */
