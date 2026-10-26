@@ -21,6 +21,8 @@
   "author": "Beomsu Koh",
   "license": "MIT",
   "devDependencies": {
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.13",
     "@eslint/js": "10.0.1",
     "@types/node": "^26.6.5",
     "esbuild": "^0.28.2",

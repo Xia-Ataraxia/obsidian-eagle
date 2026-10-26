@@ -38,7 +38,7 @@ export class UploadProgress {
     this.notices().show('uploading', { images }, {
       timeout: 0,
       progress: { done: this.done, total },
-      button: { text: 'Cancel', callback: () => this.cancelAll() },
+      button: { text: 'Cancel', label: 'Cancel upload', callback: () => this.cancelAll() },
     })
   }
 }

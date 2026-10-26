@@ -10,7 +10,7 @@ export type NoticeCatalog = Record<string, NoticeDefinition>;
 
 export interface NoticeShowOptions {
 	timeout?: number;
-	button?: { text: string; callback: () => void };
+	button?: { text: string; callback: () => void; label?: string };
 	/** Renders a progress bar; re-show the same id to advance it. */
 	progress?: { done: number; total: number };
 }
@@ -150,7 +150,7 @@ export class PluginNotices {
 	private buildFragment(
 		id: string,
 		text: string,
-		opts: { button?: { text: string; callback: () => void }; progress?: { done: number; total: number }; immutable: boolean }
+		opts: { button?: { text: string; callback: () => void; label?: string }; progress?: { done: number; total: number }; immutable: boolean }
 	): DocumentFragment {
 		const fragment = createFragment();
 		const wrapper = fragment.createDiv({ cls: 'eagle-notice' });
@@ -162,6 +162,7 @@ export class PluginNotices {
 		const actions = row.createDiv({ cls: 'eagle-notice-actions' });
 		if (opts.button?.text && typeof opts.button.callback === 'function') {
 			const btn = actions.createEl('button', { cls: 'eagle-notice-btn', type: 'button', text: opts.button.text });
+			if (opts.button.label) setTooltip(btn, opts.button.label);
 			btn.addEventListener('click', () => {
 				opts.button?.callback();
 				this.remove(id);
