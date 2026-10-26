@@ -189,7 +189,9 @@ export default class EaglePluginSettingsTab extends PluginSettingTab {
         text
           .setPlaceholder('Eagle-cache')
           .setValue(this.plugin.settings.cacheFolderName)
-          .onChange((value) => void this.setControlValue('cacheFolderName', value.trim() || 'eagle-cache'))
+          // In-memory while typing; persisted on blur and in hide() so partial names never hit data.json.
+          .onChange((value) => { this.plugin.settings.cacheFolderName = value.trim() || 'eagle-cache' })
+        text.inputEl.addEventListener('blur', () => void this.plugin.saveSettings())
       })
       .addButton((btn) => {
         btn.setButtonText('Browse').onClick(() => {
