@@ -256,8 +256,12 @@
   row-gap: var(--size-4-2);
 }
 
+/* A long folder name truncates with an ellipsis instead of being cut mid-glyph. */
 .eagle-wrap-controls select.dropdown {
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .eagle-connection-status {
