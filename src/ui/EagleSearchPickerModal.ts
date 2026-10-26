@@ -3,6 +3,7 @@ import { App, ButtonComponent, Modal, TextComponent, setIcon } from 'obsidian'
 import EagleApiError, { EagleUnreachableError } from '../domain/EagleApiError'
 import { searchErrorStatus } from '../domain/search-error'
 import { countLabel } from '../utils/plural'
+import { nextThumbnailRetry } from '../utils/thumbnail-retry'
 import { PluginLogger } from '../utils/plugin-logger'
 import type { EagleItemSearchResult, EagleSearchPickerUploader } from '../types/eagle-uploader-types'
 import { fileUrlToDisplayUrl } from './file-url'
@@ -24,6 +25,7 @@ export default class EagleSearchPickerModal extends Modal {
   private declare gridEl: HTMLElement
   private results: EagleItemSearchResult[] = []
   private readonly thumbFallbackMap = new Map<string, { wrapper: HTMLElement; ext?: string }>()
+  private readonly thumbFailures = new Map<string, number>()
   private activeSearchToken = 0
   private debounceTimer: number | null = null
   private isThumbnailFallbackLoading = false
@@ -85,7 +87,7 @@ export default class EagleSearchPickerModal extends Modal {
 
     this.activeSearchToken += 1
     this.isThumbnailFallbackLoading = false
-    this.thumbFallbackMap.clear()
+    this.resetThumbnailFallbacks()
     this.contentEl.empty()
   }
 
@@ -126,7 +128,7 @@ export default class EagleSearchPickerModal extends Modal {
     const keyword = this.keywordInput.getValue().trim()
     if (!keyword) {
       this.results = []
-      this.thumbFallbackMap.clear()
+      this.resetThumbnailFallbacks()
       this.setStatus('Type a keyword to search Eagle images.', 'idle')
       this.renderGrid()
       return
@@ -154,7 +156,7 @@ export default class EagleSearchPickerModal extends Modal {
       }
 
       this.results = results
-      this.thumbFallbackMap.clear()
+      this.resetThumbnailFallbacks()
       this.debugLog('search:done', {
         token,
         keyword,
@@ -180,7 +182,7 @@ export default class EagleSearchPickerModal extends Modal {
         this.log.error('unexpected search error', error)
       }
       this.results = []
-      this.thumbFallbackMap.clear()
+      this.resetThumbnailFallbacks()
       this.setStatus(searchErrorStatus(error), 'error')
       this.renderGrid()
     }
@@ -234,7 +236,7 @@ export default class EagleSearchPickerModal extends Modal {
           .onClick(() => {
             this.keywordInput.setValue('')
             this.results = []
-            this.thumbFallbackMap.clear()
+            this.resetThumbnailFallbacks()
             this.setStatus('Type a keyword to search Eagle images.', 'idle')
             this.renderGrid()
             this.keywordInput.inputEl.focus()
@@ -366,6 +368,29 @@ export default class EagleSearchPickerModal extends Modal {
     this.thumbFallbackMap.set(item.id, { wrapper: thumbWrapper, ext: item.ext })
   }
 
+  private registerThumbnailFailure(itemId: string): void {
+    const failures = (this.thumbFailures.get(itemId) ?? 0) + 1
+    this.thumbFailures.set(itemId, failures)
+    if (!nextThumbnailRetry(failures).giveUp) return
+    const entry = this.thumbFallbackMap.get(itemId)
+    this.thumbFallbackMap.delete(itemId)
+    if (entry) this.showImageMissing(entry.wrapper, entry.ext)
+  }
+
+  private pendingRetryDelay(items: EagleItemSearchResult[]): number {
+    let delay = 0
+    for (const item of items) {
+      const failures = this.thumbFailures.get(item.id)
+      if (failures && this.thumbFallbackMap.has(item.id)) delay = Math.max(delay, nextThumbnailRetry(failures).delayMs)
+    }
+    return delay
+  }
+
+  private resetThumbnailFallbacks(): void {
+    this.thumbFallbackMap.clear()
+    this.thumbFailures.clear()
+  }
+
   private async loadThumbnails(token: number): Promise<void> {
     if (this.isThumbnailFallbackLoading) {
       return
@@ -410,6 +435,7 @@ export default class EagleSearchPickerModal extends Modal {
               fallbackImg.addEventListener('error', () => this.showImageMissing(thumbWrapper, ext))
               this.appendExtBadge(thumbWrapper, ext)
               this.thumbFallbackMap.delete(item.id)
+              this.thumbFailures.delete(item.id)
               this.debugLog('thumbnail:fallback:ok', {
                 token,
                 itemId: item.id,
@@ -423,12 +449,15 @@ export default class EagleSearchPickerModal extends Modal {
               if (!(error instanceof EagleApiError)) {
                 this.log.error('unexpected thumbnail load failure', error)
               }
+              this.registerThumbnailFailure(item.id)
             }
           }
         }
 
         const workerCount = Math.min(THUMBNAIL_CONCURRENCY, pending.length)
         await Promise.all(Array.from({ length: workerCount }, worker))
+        const retryDelay = this.pendingRetryDelay(pending)
+        if (retryDelay > 0) await new Promise<void>((resolve) => window.setTimeout(resolve, retryDelay))
       }
     } finally {
       this.isThumbnailFallbackLoading = false
