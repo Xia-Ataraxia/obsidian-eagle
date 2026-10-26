@@ -112,7 +112,7 @@
 }
 
 .eagle-picker-no-thumb {
-  font-size: 13px;
+  font-size: var(--font-ui-small);
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.5px;
@@ -129,7 +129,7 @@
   font-size: var(--font-ui-smaller);
   color: var(--text-normal);
   text-align: center;
-  word-break: break-all;
+  overflow-wrap: anywhere;
   width: 100%;
   overflow: hidden;
   display: -webkit-box;
@@ -146,14 +146,14 @@
   border-radius: var(--radius-s);
   background: var(--background-modifier-border);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-smallest);
   font-weight: 600;
   letter-spacing: 0.3px;
   line-height: 1.4;
 }
 
 .eagle-picker-tags {
-  font-size: 11px;
+  font-size: var(--font-smallest);
   color: var(--text-faint);
   text-align: center;
   width: 100%;
@@ -163,7 +163,7 @@
 }
 
 .eagle-picker-annotation {
-  font-size: 11px;
+  font-size: var(--font-smallest);
   color: var(--text-faint);
   font-style: italic;
   text-align: center;
