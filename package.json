@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-eagle",
-	"version": "2.9.12",
+	"version": "2.9.13",
 	"type": "module",
 	"description": "Upload images to Eagle and integrate with Obsidian notes.",
 	"scripts": {
